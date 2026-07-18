@@ -793,6 +793,8 @@ canvas.addEventListener('touchend', () => { if (longPressTimer) { clearTimeout(l
 canvas.addEventListener('touchmove', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } });
 
 /* ========== 更多菜单 ========== */
+/* 提前声明同步面板相关变量，避免 TDZ 错误（原在 mSync 事件注册之后才声明导致中断脚本） */
+const syncSheet = document.getElementById('syncSheet'), syncOverlay = document.getElementById('syncOverlay');
 const moreSheet = document.getElementById('moreSheet'), moreOverlay = document.getElementById('moreOverlay');
 function openMoreSheet() { moreSheet.classList.add('show'); moreOverlay.classList.add('show'); }
 function closeMoreSheet() { moreSheet.classList.remove('show'); moreOverlay.classList.remove('show'); }
@@ -901,7 +903,7 @@ async function syncInit() {
     setSyncStatus('云端为空·编辑后自动上传');
   }
 }
-const syncSheet = document.getElementById('syncSheet'), syncOverlay = document.getElementById('syncOverlay');
+// syncSheet/syncOverlay 已在更多菜单段提前声明
 function openSyncSheet() {
   try {
     document.getElementById('syncTokenInput').value = ghToken();
