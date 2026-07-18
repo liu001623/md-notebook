@@ -25,8 +25,60 @@
     --muted: #7a8a9a;
     --hover: #eaf2fb;
     --active: #d8e9fb;
+    --heading: #1c3a5c;
+    --canvas-bg: #ffffff;
+    --toolbar-bg: #fbfdff;
+    --quote-bg: #f5faff;
+    --quote-text: #4a6075;
+    --code-bg: #f3f6fa;
+    --code-color: #c0342d;
+    --pre-bg: #1e2937;
+    --pre-color: #e2e8f0;
+    --th-bg: #ecf4fb;
+    --math-bg: #fafcff;
+    --status-bg: #ecf4fb;
+    --h1-border: #dbe9f7;
+    --h2-border: #e5eef8;
+    --pinned-bg: #fff8e1;
+    --pinned-active-bg: #ffe9b8;
+    --pinned-active-border: #f39c12;
+    --danger: #c0392b;
+    --pi-del-active-bg: #f5c6c6;
+    --overlay-bg: rgba(0,0,0,.35);
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  [data-theme="dark"] {
+    --primary: #4a9eff;
+    --primary-dark: #2f80ed;
+    --bg: #151a26;
+    --panel: #1f2638;
+    --sidebar-bg: #1a2133;
+    --border: #2f3850;
+    --text: #e2e8f0;
+    --muted: #8b95a8;
+    --hover: #2a3245;
+    --active: #324170;
+    --heading: #c8d3e8;
+    --canvas-bg: #1f2638;
+    --toolbar-bg: #1a2133;
+    --quote-bg: #2a3245;
+    --quote-text: #b0bcd0;
+    --code-bg: #2a3245;
+    --code-color: #ff7a7a;
+    --pre-bg: #0d1117;
+    --pre-color: #c9d1d9;
+    --th-bg: #2a3245;
+    --math-bg: #2a3245;
+    --status-bg: #1a2133;
+    --h1-border: #2f3850;
+    --h2-border: #2a3245;
+    --pinned-bg: #3d2f0a;
+    --pinned-active-bg: #5a4515;
+    --pinned-active-border: #f0a020;
+    --danger: #ff6b6b;
+    --pi-del-active-bg: #4a2525;
+    --overlay-bg: rgba(0,0,0,.55);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; margin: 0; padding: 0; overscroll-behavior: none; }
@@ -61,7 +113,7 @@
   #pageTitle {
     flex: 1; border: 1px solid transparent; background: transparent;
     padding: 6px 8px; border-radius: 6px; outline: none;
-    font-size: 16px; font-weight: 600; color: #1c3a5c;
+    font-size: 16px; font-weight: 600; color: var(--heading);
     min-width: 0; text-overflow: ellipsis;
   }
   #pageTitle:focus { background: #fff; border-color: var(--primary); }
@@ -78,7 +130,7 @@
   .tg {
     display: flex; gap: 1px; padding: 2px;
     border: 1px solid var(--border); border-radius: 8px;
-    background: #fbfdff; flex-shrink: 0;
+    background: var(--toolbar-bg); flex-shrink: 0;
   }
   .btn {
     min-width: 36px; height: 32px; padding: 0 8px;
@@ -117,24 +169,24 @@
     content: attr(data-placeholder); color: var(--muted); font-style: italic; pointer-events: none;
   }
 
-  #canvas h1, #canvas h2, #canvas h3, #canvas h4 { color: #1c3a5c; margin: 1.2em 0 .5em; line-height: 1.3; word-wrap: break-word; }
-  #canvas h1 { font-size: 1.7em; border-bottom: 2px solid #dbe9f7; padding-bottom: .25em; }
-  #canvas h2 { font-size: 1.4em; border-bottom: 1px solid #e5eef8; padding-bottom: .2em; }
+  #canvas h1, #canvas h2, #canvas h3, #canvas h4 { color: var(--heading); margin: 1.2em 0 .5em; line-height: 1.3; word-wrap: break-word; }
+  #canvas h1 { font-size: 1.7em; border-bottom: 2px solid var(--h1-border); padding-bottom: .25em; }
+  #canvas h2 { font-size: 1.4em; border-bottom: 1px solid var(--h2-border); padding-bottom: .2em; }
   #canvas h3 { font-size: 1.2em; }
   #canvas p { margin: .6em 0; }
   #canvas ul, #canvas ol { padding-left: 1.5em; margin: .5em 0; }
   #canvas li { margin: .25em 0; }
   #canvas blockquote {
     margin: .8em 0; padding: .5em .9em; border-left: 4px solid var(--primary);
-    background: #f5faff; color: #4a6075; border-radius: 0 6px 6px 0;
+    background: var(--quote-bg); color: var(--quote-text); border-radius: 0 6px 6px 0;
   }
   #canvas code {
-    background: #f3f6fa; color: #c0342d; padding: 1px 5px; border-radius: 3px;
+    background: var(--code-bg); color: var(--code-color); padding: 1px 5px; border-radius: 3px;
     font-family: ui-monospace, Menlo, monospace; font-size: .92em;
     word-break: break-word;
   }
   #canvas pre {
-    background: #1e2937; color: #e2e8f0; padding: 12px 14px; border-radius: 8px;
+    background: var(--pre-bg); color: var(--pre-color); padding: 12px 14px; border-radius: 8px;
     overflow-x: auto; margin: 1em 0; line-height: 1.5; -webkit-overflow-scrolling: touch;
   }
   #canvas pre code { background: transparent; color: inherit; padding: 0; white-space: pre; }
@@ -142,12 +194,12 @@
   #canvas hr { border: none; border-top: 1px dashed #cdd9e5; margin: 1.4em 0; }
   #canvas table { border-collapse: collapse; margin: 1em 0; max-width: 100%; display: block; overflow-x: auto; }
   #canvas th, #canvas td { border: 1px solid var(--border); padding: 6px 10px; font-size: .95em; }
-  #canvas th { background: #ecf4fb; }
+  background: var(--th-bg);
   #canvas img { max-width: 100%; border-radius: 6px; }
   #canvas mark { background: #fff3a8; color: inherit; padding: 0 2px; border-radius: 2px; }
   #canvas .math-block {
     display: block; text-align: center; margin: 1em 0;
-    padding: 8px; background: #fafcff; border-radius: 6px;
+    padding: 8px; background: var(--math-bg); border-radius: 6px;
     overflow-x: auto; -webkit-overflow-scrolling: touch;
   }
   #canvas .math-inline, #canvas .math-block { cursor: pointer; }
@@ -155,7 +207,7 @@
 
   /* ===== 状态栏 ===== */
   .statusbar {
-    padding: 4px 12px; background: #ecf4fb; border-top: 1px solid var(--border);
+    padding: 4px 12px; background: var(--status-bg); border-top: 1px solid var(--border);
     font-size: 11px; color: var(--muted);
     display: flex; justify-content: space-between; flex-shrink: 0;
   }
@@ -196,8 +248,8 @@
   }
   .page-item:active { background: var(--hover); }
   .page-item.active { background: var(--active); border-color: var(--primary); font-weight: 500; }
-  .page-item.pinned { background: #fff8e1; }
-  .page-item.pinned.active { background: #ffe9b8; border-color: #f39c12; }
+  .page-item.pinned { background: var(--pinned-bg); }
+  .page-item.pinned.active { background: var(--pinned-active-bg); border-color: var(--pinned-active-border); }
   .page-item .pi-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .page-item .pi-pin { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--muted); border-radius: 6px; font-size: 16px; flex-shrink: 0; }
   .page-item .pi-pin.active { color: #f39c12; }
@@ -205,7 +257,7 @@
     width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
     color: var(--muted); border-radius: 6px; font-size: 14px; flex-shrink: 0;
   }
-  .page-item .pi-del:active { background: #f5c6c6; color: #c0392b; }
+  .page-item .pi-del:active { background: var(--pi-del-active-bg); color: var(--danger); }
   .empty-tip { padding: 30px 12px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.8; }
   .sidebar-search { padding: 0 12px 8px; display: flex; flex-direction: column; gap: 6px; }
   .sidebar-search input {
@@ -236,7 +288,7 @@
     display: flex; align-items: center; gap: 12px;
   }
   .sheet-item:active { background: var(--hover); }
-  .sheet-item.danger { color: #c0392b; }
+  .sheet-item.danger { color: var(--danger); }
   .sheet-item .si-icon { font-size: 18px; width: 24px; text-align: center; }
   .sheet-cancel {
     margin: 8px 12px 0; padding: 14px; text-align: center;
@@ -254,7 +306,7 @@
     display: flex; flex-direction: column;
   }
   .math-sheet.show { transform: translateY(0); }
-  .math-sheet h3 { margin: 4px 0 10px; color: #1c3a5c; font-size: 15px; text-align: center; }
+  .math-sheet h3 { margin: 4px 0 10px; color: var(--heading); font-size: 15px; text-align: center; }
   .math-sheet textarea {
     width: 100%; flex: 0 0 auto; height: 70px; padding: 10px;
     border: 1px solid var(--border); border-radius: 8px;
@@ -380,6 +432,7 @@
   <div class="sheet-item" id="mSync"><span class="si-icon">☁</span>云同步设置</div>
   <div class="sheet-item" id="mPush"><span class="si-icon">⬆</span>立即上传云端</div>
   <div class="sheet-item" id="mPull"><span class="si-icon">⬇</span>从云端拉取</div>
+  <div class="sheet-item" id="mTheme"><span class="si-icon">🌓</span><span class="theme-label">主题：跟随系统</span></div>
   <div class="sheet-item danger" id="mDelete"><span class="si-icon">🗑</span>删除当前页</div>
   <div class="sheet-cancel" id="mCancel">取消</div>
 </div>
@@ -805,6 +858,7 @@ document.getElementById('mNew').addEventListener('click', newPage);
 document.getElementById('mImport').addEventListener('click', () => { closeMoreSheet(); document.getElementById('fileInput').click(); });
 document.getElementById('mDelete').addEventListener('click', () => { closeMoreSheet(); if (state.currentId) deletePage(state.currentId); });
 document.getElementById('mSync').addEventListener('click', () => { closeMoreSheet(); setTimeout(() => { try { openSyncSheet(); } catch(e){ alert('openSyncSheet: '+e.message); } }, 250); });
+document.getElementById('mTheme').addEventListener('click', cycleTheme);
 document.getElementById('mPush').addEventListener('click', () => { closeMoreSheet(); setTimeout(() => { try { ghUpload(); } catch(e){ alert('ghUpload: '+e.message); } }, 250); });
 document.getElementById('mPull').addEventListener('click', () => { closeMoreSheet(); setTimeout(() => { try { syncInit(); } catch(e){ alert('syncInit: '+e.message); } }, 250); });
 syncOverlay.addEventListener('click', closeSyncSheet);
@@ -888,20 +942,32 @@ async function syncInit() {
   if (!ghToken()) { setSyncStatus('未配置云同步'); return; }
   setSyncStatus('拉取云端…');
   const cloud = await ghDownload();
-  if (cloud && cloud.pages && cloud.pages.length) {
-    const localCount = state.pages.length;
-    if (localCount > 1 && !confirm('云端有 ' + cloud.pages.length + ' 个页面，本地有 ' + localCount + ' 个。\n用云端覆盖本地吗？（取消则保留本地）')) {
-      setSyncStatus('已保留本地·点⬆上传'); return;
-    }
-    state = cloud;
-    if (!state.currentId || !state.pages.find(p=>p.id===state.currentId)) state.currentId = state.pages[0].id;
-    saveState(); renderPageList();
-    const cur = state.pages.find(p => p.id === state.currentId);
-    if (cur) { pageTitle.value = cur.title; canvas.innerHTML = cur.html || ''; renderMathInCanvas(); }
-    setSyncStatus('已拉取云端 ' + cloud.pages.length + ' 页');
-  } else {
+  if (!cloud || !cloud.pages || !cloud.pages.length) {
     setSyncStatus('云端为空·编辑后自动上传');
+    return;
   }
+  // 无感合并：按页面 id 合并，相同 id 取 updatedAt 较新版本，不再弹窗询问
+  const map = new Map();
+  state.pages.forEach(p => map.set(p.id, p));
+  let cloudNewer = 0;
+  cloud.pages.forEach(p => {
+    const ex = map.get(p.id);
+    if (!ex) { map.set(p.id, p); cloudNewer++; }
+    else if ((p.updatedAt||0) > (ex.updatedAt||0)) { map.set(p.id, p); cloudNewer++; }
+  });
+  const mergedPages = Array.from(map.values());
+  mergedPages.sort((a,b) => {
+    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+    return (b.updatedAt||0) - (a.updatedAt||0);
+  });
+  state.pages = mergedPages;
+  if (!state.currentId || !state.pages.find(p=>p.id===state.currentId)) state.currentId = state.pages[0].id;
+  saveState(); renderPageList();
+  const cur = state.pages.find(p => p.id === state.currentId);
+  if (cur) { pageTitle.value = cur.title; canvas.innerHTML = cur.html || ''; renderMathInCanvas(); }
+  setSyncStatus('已同步 ' + new Date().toLocaleTimeString());
+  // 若云端有更新版本，自动上传合并结果以让多端一致
+  if (cloudNewer > 0) setTimeout(ghUpload, 500);
 }
 // syncSheet/syncOverlay 已在更多菜单段提前声明
 function openSyncSheet() {
@@ -1084,7 +1150,35 @@ document.addEventListener('touchend', (e) => {
   lastTouchEnd = now;
 }, { passive: false });
 
+/* ========== 主题切换 ========== */
+const THEME_KEY = 'md-notebook-theme';
+function getThemeMode() { return localStorage.getItem(THEME_KEY) || 'auto'; }
+function applyTheme() {
+  const mode = getThemeMode();
+  let actual = mode;
+  if (mode === 'auto') {
+    actual = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  }
+  document.documentElement.setAttribute('data-theme', actual);
+  const labels = { auto: '跟随系统', light: '浅色', dark: '深色' };
+  document.querySelectorAll('.theme-label').forEach(el => { el.textContent = '主题：' + labels[mode]; });
+}
+function cycleTheme() {
+  const order = ['auto', 'light', 'dark'];
+  const cur = getThemeMode();
+  const next = order[(order.indexOf(cur) + 1) % 3];
+  localStorage.setItem(THEME_KEY, next);
+  applyTheme();
+  closeMoreSheet();
+}
+if (window.matchMedia) {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (getThemeMode() === 'auto') applyTheme();
+  });
+}
+
 /* ========== 初始化 ========== */
+applyTheme();
 loadState();
 renderPageList();
 const cur = state.pages.find(p => p.id === state.currentId);
