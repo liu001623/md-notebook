@@ -475,7 +475,7 @@
 <script>
 /* ========== 数据 ========== */
 const STORAGE_KEY = 'md-notebook-mobile-v1';
-let state = { pages: [], currentId: null };
+let state = { pages: [], currentId: null, deletedIds: {} };
 let saveTimer = null;
 
 function loadState() {
@@ -484,8 +484,12 @@ function loadState() {
     if (s) state = JSON.parse(s);
   } catch (e) {}
   if (!state.pages || !Array.isArray(state.pages)) state.pages = [];
+  if (!state.deletedIds || typeof state.deletedIds !== 'object') state.deletedIds = {};
+  // 过滤掉墓碑中的页面（防数据不一致）
+  state.pages = state.pages.filter(p => !state.deletedIds[p.id]);
   if (!state.pages.length) {
-    const id = 'p_' + Date.now();
+    // 使用固定 id，避免多端各自创建导致「欢迎使用」重复
+    const id = 'welcome-default';
     state.pages = [{ id, title: '欢迎使用', html: getDefaultHtml(), createdAt: Date.now(), updatedAt: Date.now() }];
     state.currentId = id;
   }
@@ -637,6 +641,9 @@ function deletePage(id) {
   if (!p) return;
   if (!confirm(`删除页面「${p.title || '未命名'}」？此操作不可撤销。`)) return;
   state.pages = state.pages.filter(x => x.id !== id);
+  // 记录墓碑：用于多端同步时正确传递删除操作
+  if (!state.deletedIds) state.deletedIds = {};
+  state.deletedIds[id] = Date.now();
   if (state.currentId === id) {
     state.currentId = state.pages[0] ? state.pages[0].id : null;
     if (state.currentId) {
@@ -644,7 +651,7 @@ function deletePage(id) {
       pageTitle.value = np.title; canvas.innerHTML = np.html || ''; renderMathInCanvas();
     } else { pageTitle.value = ''; canvas.innerHTML = ''; }
   }
-  renderPageList(); saveState();
+  renderPageList(); saveState(); scheduleSync();
 }
 
 /* ========== 导入 ========== */
@@ -942,18 +949,41 @@ async function syncInit() {
   if (!ghToken()) { setSyncStatus('未配置云同步'); return; }
   setSyncStatus('拉取云端…');
   const cloud = await ghDownload();
-  if (!cloud || !cloud.pages || !cloud.pages.length) {
+  if (!cloud) { setSyncStatus('拉取失败'); return; }
+  if (!cloud.pages || !cloud.pages.length) {
     setSyncStatus('云端为空·编辑后自动上传');
     return;
   }
-  // 无感合并：按页面 id 合并，相同 id 取 updatedAt 较新版本，不再弹窗询问
+  // 确保本地有 deletedIds
+  if (!state.deletedIds) state.deletedIds = {};
+  const localDeleted = state.deletedIds;
+  const cloudDeleted = cloud.deletedIds || {};
+  const now = Date.now();
+  // 清理超过 30 天的墓碑（避免无限增长）
+  const TTL = 30 * 24 * 60 * 60 * 1000;
+  Object.keys(localDeleted).forEach(id => { if (now - localDeleted[id] > TTL) delete localDeleted[id]; });
+  // 合并后的墓碑集合
+  const mergedDeleted = { ...localDeleted, ...cloudDeleted };
+  // 如果本地仅有默认欢迎页且云端有其他内容，丢弃本地默认页（不记墓碑，因为不是真实删除）
+  if (state.pages.length === 1 && state.pages[0].id === 'welcome-default' && cloud.pages.length > 0) {
+    state.pages = [];
+  }
+  // 合并页面：按 id 合并，相同 id 取 updatedAt 较新版本
   const map = new Map();
   state.pages.forEach(p => map.set(p.id, p));
-  let cloudNewer = 0;
+  let changed = 0;
   cloud.pages.forEach(p => {
+    // 跳过被墓碑标记删除的页面（本地或云端删除的）
+    const delTime = mergedDeleted[p.id] || 0;
+    if (delTime > (p.updatedAt || 0)) return;
     const ex = map.get(p.id);
-    if (!ex) { map.set(p.id, p); cloudNewer++; }
-    else if ((p.updatedAt||0) > (ex.updatedAt||0)) { map.set(p.id, p); cloudNewer++; }
+    if (!ex) { map.set(p.id, p); changed++; }
+    else if ((p.updatedAt||0) > (ex.updatedAt||0)) { map.set(p.id, p); changed++; }
+  });
+  // 移除被云端墓碑标记删除的本地页面
+  state.pages.forEach(p => {
+    const cloudDelTime = cloudDeleted[p.id] || 0;
+    if (cloudDelTime > (p.updatedAt || 0)) { map.delete(p.id); changed++; }
   });
   const mergedPages = Array.from(map.values());
   mergedPages.sort((a,b) => {
@@ -961,13 +991,14 @@ async function syncInit() {
     return (b.updatedAt||0) - (a.updatedAt||0);
   });
   state.pages = mergedPages;
-  if (!state.currentId || !state.pages.find(p=>p.id===state.currentId)) state.currentId = state.pages[0].id;
+  state.deletedIds = mergedDeleted;
+  if (!state.currentId || !state.pages.find(p=>p.id===state.currentId)) state.currentId = state.pages[0] ? state.pages[0].id : null;
   saveState(); renderPageList();
   const cur = state.pages.find(p => p.id === state.currentId);
   if (cur) { pageTitle.value = cur.title; canvas.innerHTML = cur.html || ''; renderMathInCanvas(); }
   setSyncStatus('已同步 ' + new Date().toLocaleTimeString());
-  // 若云端有更新版本，自动上传合并结果以让多端一致
-  if (cloudNewer > 0) setTimeout(ghUpload, 500);
+  // 若有变化，上传合并结果让多端一致
+  if (changed > 0) setTimeout(ghUpload, 500);
 }
 // syncSheet/syncOverlay 已在更多菜单段提前声明
 function openSyncSheet() {
