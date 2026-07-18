@@ -802,9 +802,9 @@ document.getElementById('mCancel').addEventListener('click', closeMoreSheet);
 document.getElementById('mNew').addEventListener('click', newPage);
 document.getElementById('mImport').addEventListener('click', () => { closeMoreSheet(); document.getElementById('fileInput').click(); });
 document.getElementById('mDelete').addEventListener('click', () => { closeMoreSheet(); if (state.currentId) deletePage(state.currentId); });
-document.getElementById('mSync').addEventListener('click', () => { closeMoreSheet(); openSyncSheet(); });
-document.getElementById('mPush').addEventListener('click', () => { closeMoreSheet(); ghUpload(); });
-document.getElementById('mPull').addEventListener('click', () => { closeMoreSheet(); syncInit(); });
+document.getElementById('mSync').addEventListener('click', () => { closeMoreSheet(); setTimeout(() => { try { openSyncSheet(); } catch(e){ alert('openSyncSheet: '+e.message); } }, 250); });
+document.getElementById('mPush').addEventListener('click', () => { closeMoreSheet(); setTimeout(() => { try { ghUpload(); } catch(e){ alert('ghUpload: '+e.message); } }, 250); });
+document.getElementById('mPull').addEventListener('click', () => { closeMoreSheet(); setTimeout(() => { try { syncInit(); } catch(e){ alert('syncInit: '+e.message); } }, 250); });
 syncOverlay.addEventListener('click', closeSyncSheet);
 document.getElementById('syncClose').addEventListener('click', closeSyncSheet);
 document.getElementById('syncSave').addEventListener('click', () => {
@@ -903,11 +903,18 @@ async function syncInit() {
 }
 const syncSheet = document.getElementById('syncSheet'), syncOverlay = document.getElementById('syncOverlay');
 function openSyncSheet() {
-  document.getElementById('syncTokenInput').value = ghToken();
-  document.getElementById('syncStatusInfo').textContent = statRight.textContent;
-  syncSheet.classList.add('show'); syncOverlay.classList.add('show');
+  try {
+    document.getElementById('syncTokenInput').value = ghToken();
+    const infoEl = document.getElementById('syncStatusInfo');
+    if (infoEl) infoEl.textContent = (typeof statRight !== 'undefined' && statRight) ? statRight.textContent : '';
+    syncSheet.classList.add('show'); syncOverlay.classList.add('show');
+  } catch(e) {
+    alert('打开同步面板出错: ' + e.message);
+  }
 }
-function closeSyncSheet() { syncSheet.classList.remove('show'); syncOverlay.classList.remove('show'); }
+function closeSyncSheet() {
+  try { syncSheet.classList.remove('show'); syncOverlay.classList.remove('show'); } catch(e){}
+}
 
 /* ========== HTML → Markdown ========== */
 function htmlToMd(html) {
