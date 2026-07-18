@@ -187,10 +187,7 @@
   .sb-btn:active { background: var(--hover); }
   .sb-btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
   .sidebar-title { padding: 12px 12px 6px; font-size: 11px; color: var(--muted); letter-spacing: 1px; }
-  .sidebar-list {
-    flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
-    padding: 4px 8px 8px; list-style: none; margin: 0;
-  }
+  .sidebar-list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 8px 8px; list-style: none; margin: 0; }
   .page-item {
     padding: 12px 10px; margin-bottom: 4px; border-radius: 8px;
     cursor: pointer; font-size: 14px;
@@ -199,13 +196,27 @@
   }
   .page-item:active { background: var(--hover); }
   .page-item.active { background: var(--active); border-color: var(--primary); font-weight: 500; }
+  .page-item.pinned { background: #fff8e1; }
+  .page-item.pinned.active { background: #ffe9b8; border-color: #f39c12; }
   .page-item .pi-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .page-item .pi-pin { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--muted); border-radius: 6px; font-size: 16px; flex-shrink: 0; }
+  .page-item .pi-pin.active { color: #f39c12; }
   .page-item .pi-del {
     width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
     color: var(--muted); border-radius: 6px; font-size: 14px; flex-shrink: 0;
   }
   .page-item .pi-del:active { background: #f5c6c6; color: #c0392b; }
   .empty-tip { padding: 30px 12px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.8; }
+  .sidebar-search { padding: 0 12px 8px; display: flex; flex-direction: column; gap: 6px; }
+  .sidebar-search input {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--border);
+    border-radius: 8px; font-size: 16px; outline: none; font-family: inherit;
+  }
+  .sidebar-search input:focus { border-color: var(--primary); }
+  .sidebar-search select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 8px; font-size: 14px; outline: none; background: #fff; color: var(--text); font-family: inherit;
+  }
 
   /* ===== 更多菜单（底部 sheet） ===== */
   .sheet {
@@ -348,7 +359,14 @@
     <button class="sb-btn primary" id="newPageBtn">+ 新建</button>
     <button class="sb-btn" id="importBtn">📥 导入</button>
   </div>
-  <div class="sidebar-title">📝 页面列表</div>
+  <div class="sidebar-search">
+    <input type="text" id="searchInput" placeholder="🔍 搜索标题或正文...">
+    <select id="sortSelect">
+      <option value="recent">最近访问</option>
+      <option value="title">按标题</option>
+      <option value="updated">按修改时间</option>
+    </select>
+  </div>
   <ul class="sidebar-list" id="pageList"></ul>
 </aside>
 
@@ -359,6 +377,9 @@
   <div class="sheet-item" id="mNew"><span class="si-icon">📄</span>新建页面</div>
   <div class="sheet-item" id="mImport"><span class="si-icon">📥</span>导入 .md 文件</div>
   <div class="sheet-item" id="mExport"><span class="si-icon">⬇</span>导出当前页为 .md</div>
+  <div class="sheet-item" id="mSync"><span class="si-icon">☁</span>云同步设置</div>
+  <div class="sheet-item" id="mPush"><span class="si-icon">⬆</span>立即上传云端</div>
+  <div class="sheet-item" id="mPull"><span class="si-icon">⬇</span>从云端拉取</div>
   <div class="sheet-item danger" id="mDelete"><span class="si-icon">🗑</span>删除当前页</div>
   <div class="sheet-cancel" id="mCancel">取消</div>
 </div>
@@ -377,6 +398,26 @@
 </div>
 
 <input type="file" id="fileInput" accept=".md,.txt,.markdown">
+
+<!-- 云同步设置 sheet -->
+<div class="overlay" id="syncOverlay"></div>
+<div class="math-sheet" id="syncSheet" style="top:25%">
+  <h3>☁ 云同步设置</h3>
+  <div style="font-size:13px;color:#666;margin-bottom:8px;line-height:1.6">
+    粘贴 GitHub Token 后点「保存Token」，即可多端自动同步。<br>
+    数据存在你的 GitHub 仓库 <code>data/notebook.json</code>。
+  </div>
+  <textarea id="syncTokenInput" placeholder="粘贴 GitHub Token（ghp_ 开头）" style="height:60px;font-size:13px"></textarea>
+  <div id="syncStatusInfo" style="font-size:12px;color:#666;margin:6px 0;text-align:center;min-height:16px"></div>
+  <div class="math-actions">
+    <button id="syncPull">⬇ 拉取云端</button>
+    <button id="syncPush">⬆ 上传本地</button>
+  </div>
+  <div class="math-actions" style="margin-top:8px">
+    <button id="syncSave" class="primary">保存 Token</button>
+    <button id="syncClose">关闭</button>
+  </div>
+</div>
 
 <script>
 /* ========== 数据 ========== */
@@ -441,31 +482,71 @@ overlay.addEventListener('click', closeSidebar);
 
 function renderPageList() {
   pageList.innerHTML = '';
+  const arr = sortedAndFilteredPages();
   if (!state.pages.length) {
     pageList.innerHTML = '<li class="empty-tip">暂无页面<br>点击「+ 新建」或「📥 导入」</li>';
     statLeft.textContent = '页面数: 0';
     return;
   }
-  state.pages.forEach(p => {
+  if (!arr.length) {
+    pageList.innerHTML = '<li class="empty-tip">没有匹配“' + escapeHtml(searchInput.value) + '”的页面</li>';
+    statLeft.textContent = '匹配: 0 / ' + state.pages.length;
+    return;
+  }
+  arr.forEach(p => {
     const li = document.createElement('li');
-    li.className = 'page-item' + (p.id === state.currentId ? ' active' : '');
+    li.className = 'page-item' + (p.id === state.currentId ? ' active' : '') + (p.pinned ? ' pinned' : '');
     li.dataset.id = p.id;
-    li.innerHTML = `<span>📄</span><span class="pi-title"></span><span class="pi-del">✕</span>`;
+    li.innerHTML = `<span>${p.pinned ? '📌' : '📄'}</span><span class="pi-title"></span><span class="pi-pin ${p.pinned?'active':''}">${p.pinned?'★':'☆'}</span><span class="pi-del">✕</span>`;
     li.querySelector('.pi-title').textContent = p.title || '未命名';
     li.addEventListener('click', (e) => {
-      if (e.target.classList.contains('pi-del')) { e.stopPropagation(); deletePage(p.id); }
-      else { switchPage(p.id); closeSidebar(); }
+      if (e.target.classList.contains('pi-del')) { e.stopPropagation(); deletePage(p.id); return; }
+      if (e.target.classList.contains('pi-pin')) { e.stopPropagation(); togglePin(p.id); return; }
+      switchPage(p.id); closeSidebar();
     });
     pageList.appendChild(li);
   });
-  statLeft.textContent = `页面数: ${state.pages.length}`;
+  const kw = searchInput.value;
+  statLeft.textContent = kw ? ('匹配: ' + arr.length + ' / ' + state.pages.length) : ('页面数: ' + state.pages.length);
 }
+
+/* ========== 搜索/排序/置顶 ========== */
+const searchInput = document.getElementById('searchInput');
+const sortSelect = document.getElementById('sortSelect');
+let lastViewed = {};
+function getPageText(p) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = p.html || '';
+  return (p.title || '') + ' ' + tmp.textContent;
+}
+function sortedAndFilteredPages() {
+  const kw = (searchInput.value || '').trim().toLowerCase();
+  let arr = state.pages.slice();
+  if (kw) arr = arr.filter(p => getPageText(p).toLowerCase().includes(kw));
+  const sortBy = sortSelect.value || 'recent';
+  arr.sort((a, b) => {
+    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+    if (sortBy === 'title') return (a.title||'').localeCompare(b.title||'', 'zh-CN');
+    if (sortBy === 'updated') return (b.updatedAt||0) - (a.updatedAt||0);
+    return (lastViewed[b.id]||0) - (lastViewed[a.id]||0);
+  });
+  return arr;
+}
+function togglePin(id) {
+  const p = state.pages.find(x => x.id === id); if (!p) return;
+  p.pinned = !p.pinned; p.updatedAt = Date.now();
+  scheduleSave(); scheduleSync(); renderPageList();
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+searchInput.addEventListener('input', renderPageList);
+sortSelect.addEventListener('change', renderPageList);
 
 function switchPage(id) {
   saveCurrentPage();
   const p = state.pages.find(x => x.id === id);
   if (!p) return;
   state.currentId = id;
+  lastViewed[id] = Date.now();
   pageTitle.value = p.title;
   canvas.innerHTML = p.html || '';
   renderMathInCanvas();
@@ -480,6 +561,7 @@ function saveCurrentPage() {
   p.title = pageTitle.value || '未命名';
   p.updatedAt = Date.now();
   scheduleSave();
+  scheduleSync();
 }
 function newPage() {
   saveCurrentPage();
@@ -720,6 +802,21 @@ document.getElementById('mCancel').addEventListener('click', closeMoreSheet);
 document.getElementById('mNew').addEventListener('click', newPage);
 document.getElementById('mImport').addEventListener('click', () => { closeMoreSheet(); document.getElementById('fileInput').click(); });
 document.getElementById('mDelete').addEventListener('click', () => { closeMoreSheet(); if (state.currentId) deletePage(state.currentId); });
+document.getElementById('mSync').addEventListener('click', () => { closeMoreSheet(); openSyncSheet(); });
+document.getElementById('mPush').addEventListener('click', () => { closeMoreSheet(); ghUpload(); });
+document.getElementById('mPull').addEventListener('click', () => { closeMoreSheet(); syncInit(); });
+syncOverlay.addEventListener('click', closeSyncSheet);
+document.getElementById('syncClose').addEventListener('click', closeSyncSheet);
+document.getElementById('syncSave').addEventListener('click', () => {
+  const t = document.getElementById('syncTokenInput').value.trim();
+  if (t) localStorage.setItem(GH.tokenKey, t); else localStorage.removeItem(GH.tokenKey);
+  document.getElementById('syncStatusInfo').textContent = t ? 'Token 已保存' : 'Token 已清除';
+  closeSyncSheet();
+  setSyncStatus(t ? 'Token 已保存·2秒后同步' : 'Token 已清除');
+  if (t) setTimeout(syncInit, 500);
+});
+document.getElementById('syncPull').addEventListener('click', () => syncInit());
+document.getElementById('syncPush').addEventListener('click', () => ghUpload());
 document.getElementById('mExport').addEventListener('click', () => {
   saveCurrentPage();
   const p = state.pages.find(x => x.id === state.currentId);
@@ -736,6 +833,81 @@ document.getElementById('mExport').addEventListener('click', () => {
 
 document.getElementById('newPageBtn').addEventListener('click', () => { newPage(); closeSidebar(); });
 document.getElementById('importBtn').addEventListener('click', () => { closeSidebar(); document.getElementById('fileInput').click(); });
+
+/* ========== GitHub 云同步 ========== */
+const GH = { owner: 'liu001623', repo: 'md-notebook', path: 'data/notebook.json', tokenKey: 'gh_token_v1', shaKey: 'gh_sha_v1' };
+let syncTimer = null, isSyncing = false, hasPromptedConflict = false;
+function ghToken() { return localStorage.getItem(GH.tokenKey) || ''; }
+function setSyncStatus(t) { statRight.textContent = t; }
+function utf8ToB64(s) { return btoa(unescape(encodeURIComponent(s))); }
+function b64ToUtf8(s) { try { return decodeURIComponent(escape(atob(s))); } catch(e) { return ''; } }
+async function ghApi(path, opts) {
+  opts = opts || {};
+  const headers = { 'Accept': 'application/vnd.github+json' };
+  const token = ghToken();
+  if (token) headers['Authorization'] = 'token ' + token;
+  if (opts.body) headers['Content-Type'] = 'application/json';
+  return fetch('https://api.github.com/repos/' + GH.owner + '/' + GH.repo + '/' + path, { method: opts.method || 'GET', headers: headers, body: opts.body });
+}
+async function ghDownload() {
+  try {
+    const r = await ghApi('contents/' + GH.path);
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    localStorage.setItem(GH.shaKey, j.sha);
+    return JSON.parse(b64ToUtf8(j.content));
+  } catch(e) { setSyncStatus('拉取失败'); return null; }
+}
+async function ghUpload() {
+  if (!ghToken()) { setSyncStatus('未配置Token'); openSyncSheet(); return; }
+  if (isSyncing) return;
+  isSyncing = true; setSyncStatus('上传中…');
+  try {
+    const body = { message: 'sync ' + new Date().toISOString(), content: utf8ToB64(JSON.stringify(state)) };
+    const sha = localStorage.getItem(GH.shaKey);
+    if (sha) body.sha = sha;
+    const r = await ghApi('contents/' + GH.path, { method: 'PUT', body: JSON.stringify(body) });
+    if (r.status === 409) { setSyncStatus('冲突，请先拉取'); hasPromptedConflict = false; return; }
+    if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message || ('HTTP ' + r.status)); }
+    const j = await r.json();
+    localStorage.setItem(GH.shaKey, j.content.sha);
+    setSyncStatus('已同步 ' + new Date().toLocaleTimeString());
+  } catch(e) { setSyncStatus('上传失败:' + (e.message||'').slice(0,20)); }
+  finally { isSyncing = false; }
+}
+function scheduleSync() {
+  if (!ghToken() || isSyncing) return;
+  clearTimeout(syncTimer);
+  setSyncStatus('待同步…');
+  syncTimer = setTimeout(ghUpload, 2500);
+}
+async function syncInit() {
+  if (!ghToken()) { setSyncStatus('未配置云同步'); return; }
+  setSyncStatus('拉取云端…');
+  const cloud = await ghDownload();
+  if (cloud && cloud.pages && cloud.pages.length) {
+    const localCount = state.pages.length;
+    if (localCount > 1 && !confirm('云端有 ' + cloud.pages.length + ' 个页面，本地有 ' + localCount + ' 个。\n用云端覆盖本地吗？（取消则保留本地）')) {
+      setSyncStatus('已保留本地·点⬆上传'); return;
+    }
+    state = cloud;
+    if (!state.currentId || !state.pages.find(p=>p.id===state.currentId)) state.currentId = state.pages[0].id;
+    saveState(); renderPageList();
+    const cur = state.pages.find(p => p.id === state.currentId);
+    if (cur) { pageTitle.value = cur.title; canvas.innerHTML = cur.html || ''; renderMathInCanvas(); }
+    setSyncStatus('已拉取云端 ' + cloud.pages.length + ' 页');
+  } else {
+    setSyncStatus('云端为空·编辑后自动上传');
+  }
+}
+const syncSheet = document.getElementById('syncSheet'), syncOverlay = document.getElementById('syncOverlay');
+function openSyncSheet() {
+  document.getElementById('syncTokenInput').value = ghToken();
+  document.getElementById('syncStatusInfo').textContent = statRight.textContent;
+  syncSheet.classList.add('show'); syncOverlay.classList.add('show');
+}
+function closeSyncSheet() { syncSheet.classList.remove('show'); syncOverlay.classList.remove('show'); }
 
 /* ========== HTML → Markdown ========== */
 function htmlToMd(html) {
@@ -803,6 +975,85 @@ pageTitle.addEventListener('input', () => {
   if (li) li.textContent = pageTitle.value || '未命名';
 });
 canvas.addEventListener('input', saveCurrentPage);
+
+/* ========== AI 粘贴适配（豆包/WPS/灵犀/DeepSeek/元宝等）========== */
+function isMarkdownLike(text) {
+  if (!text) return false;
+  let score = 0;
+  if (/^#{1,6}\s/m.test(text)) score++;
+  if (/\*\*[^*]+\*\*/.test(text)) score++;
+  if (/(?<!\w)\$[^\$\n]+?\$(?!\w)/.test(text)) score++;
+  if (/\$\$[\s\S]+?\$\$/.test(text)) score++;
+  if (/^\s*[-*+]\s/m.test(text)) score++;
+  if (/^\s*\d+\.\s/m.test(text)) score++;
+  if (/^>\s/m.test(text)) score++;
+  if (/```/.test(text)) score++;
+  if (/\[[^\]]+\]\([^)]+\)/.test(text)) score++;
+  return score >= 2;
+}
+function cleanHtmlForPaste(htmlStr) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = htmlStr;
+  tmp.querySelectorAll('script,style,meta,link,head,title,noscript,iframe').forEach(el => el.remove());
+  tmp.querySelectorAll('*').forEach(el => {
+    el.removeAttribute('class'); el.removeAttribute('style');
+    el.removeAttribute('id'); el.removeAttribute('data-*');
+  });
+  tmp.querySelectorAll('.MathJax, .katex, mjx-container, .math').forEach(el => {
+    const annotation = el.querySelector('annotation[encoding="application/x-tex"]');
+    let latex = '';
+    if (annotation) latex = annotation.textContent;
+    else if (el.tagName === 'MJX-CONTAINER') {
+      const a = el.querySelector('script[type="math/tex; mode=display"], script[type="math/tex"]');
+      if (a) latex = a.textContent;
+    }
+    if (latex) {
+      const isBlock = el.classList.contains('katex-display') || (el.tagName === 'MJX-CONTAINER' && el.getAttribute('display') === 'block');
+      const wrap = isBlock ? '$$' : '$';
+      el.replaceWith(document.createTextNode(wrap + latex + wrap));
+    }
+  });
+  tmp.querySelectorAll('span[data-latex], span.math-inline, span.math-block').forEach(el => {
+    const l = el.getAttribute('data-latex') || el.textContent;
+    const isBlock = el.classList.contains('math-block');
+    el.replaceWith(document.createTextNode((isBlock ? '$$' : '$') + l + (isBlock ? '$$' : '$')));
+  });
+  return tmp.innerHTML;
+}
+function mdToCleanHtml(md) {
+  let html;
+  try { html = marked.parse(md); } catch (e) { html = '<p>' + escapeHtml(md) + '</p>'; }
+  html = wrapMathInHtml(html);
+  return html;
+}
+canvas.addEventListener('paste', (e) => {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  let plainText = null, htmlText = null;
+  for (const it of items) {
+    if (it.kind === 'string') {
+      if (it.type === 'text/plain') plainText = e.clipboardData.getData('text/plain');
+      else if (it.type === 'text/html') htmlText = e.clipboardData.getData('text/html');
+    }
+  }
+  if (plainText && isMarkdownLike(plainText)) {
+    e.preventDefault();
+    insertHtmlAtCursor(mdToCleanHtml(plainText));
+    saveCurrentPage();
+    setSyncStatus('已识别 Markdown 粘贴');
+    setTimeout(renderMathInCanvas, 50);
+    return;
+  }
+  if (htmlText && htmlText.trim()) {
+    e.preventDefault();
+    insertHtmlAtCursor(wrapMathInHtml(cleanHtmlForPaste(htmlText)));
+    saveCurrentPage();
+    setSyncStatus('已适配 AI 富文本粘贴');
+    setTimeout(renderMathInCanvas, 50);
+    return;
+  }
+});
+
 canvas.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey) {
     const k = e.key.toLowerCase();
@@ -829,6 +1080,7 @@ loadState();
 renderPageList();
 const cur = state.pages.find(p => p.id === state.currentId);
 if (cur) { pageTitle.value = cur.title; canvas.innerHTML = cur.html || ''; renderMathInCanvas(); }
+syncInit();
 
 // PWA：注册 service worker（若部署到 https 站点时生效；file:// 下静默失败）
 if ('serviceWorker' in navigator) {
@@ -839,10 +1091,10 @@ if ('serviceWorker' in navigator) {
       self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
       self.addEventListener('fetch', e => {
         e.respondWith(
-          caches.open(C).then(c => c.match(e.request).then(r => {
-            const fetcher = fetch(e.request).then(res => { if (res && res.ok) c.put(e.request, res.clone()); return res; }).catch(()=>r);
-            return r || fetcher;
-          }))
+          fetch(e.request).then(res => {
+            if (res && res.ok) { const c2=res.clone(); caches.open(C).then(c=>c.put(e.request,c2)); }
+            return res;
+          }).catch(() => caches.match(e.request).then(r=>r||new Response('离线',{status:503})))
         );
       });
     `;
