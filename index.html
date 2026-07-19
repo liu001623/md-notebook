@@ -261,6 +261,24 @@
     padding-top: var(--safe-top); padding-bottom: var(--safe-bottom);
   }
   .sidebar.open { transform: translateX(0); }
+  /* 侧边栏拖动调整宽度的把手（仅电脑版显示） */
+  .sidebar-resizer {
+    display: none; position: absolute; top: 0; right: -4px; bottom: 0;
+    width: 8px; cursor: col-resize; z-index: 91;
+    background: transparent;
+  }
+  .sidebar-resizer:hover, .sidebar-resizer.dragging { background: var(--primary); opacity: .35; }
+  /* 电脑/宽屏：侧边栏常驻左侧固定，可拖拉宽度，遮罩不显示 */
+  @media (min-width: 760px) {
+    .sidebar.pinned {
+      transform: none; transition: none;
+      width: var(--sidebar-w, 240px);
+      max-width: 480px; min-width: 200px;
+    }
+    .sidebar.pinned ~ .overlay { display: none !important; }
+    .sidebar.pinned .sidebar-resizer { display: block; }
+    .app.has-sidebar { margin-left: var(--sidebar-w, 240px); transition: margin .2s; }
+  }
   .sidebar-header {
     padding: 12px; display: flex; gap: 6px;
     border-bottom: 1px solid var(--border);
@@ -329,6 +347,34 @@
     background: var(--bg); border-radius: 10px; font-size: 15px; cursor: pointer;
   }
   .sheet-cancel:active { background: var(--hover); }
+
+  /* ===== 垃圾箱 sheet（全屏式） ===== */
+  .trash-sheet {
+    top: 8vh; bottom: 0; max-height: 92vh;
+    display: flex; flex-direction: column;
+    padding: 8px 0 calc(12px + var(--safe-bottom));
+  }
+  .trash-sheet .trash-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 16px 4px;
+  }
+  .trash-sheet .trash-header h3 { margin: 0; font-size: 17px; color: var(--heading); }
+  .trash-sheet .trash-header .sb-btn.danger { color: var(--danger); border-color: var(--danger); }
+  .trash-tip { padding: 2px 16px 8px; font-size: 12px; color: var(--muted); }
+  .trash-list { flex: 1; overflow-y: auto; list-style: none; margin: 0; padding: 0 8px; -webkit-overflow-scrolling: touch; }
+  .trash-item {
+    padding: 12px 12px; margin-bottom: 6px; border-radius: 10px;
+    background: var(--bg); border: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .trash-info { flex: 1; min-width: 0; }
+  .trash-title { font-size: 14px; font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trash-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .trash-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .trash-act { border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 6px 10px; font-size: 13px; cursor: pointer; color: var(--text); font-family: inherit; }
+  .trash-act:active { background: var(--hover); }
+  .trash-act.restore { color: var(--primary); border-color: var(--primary); }
+  .trash-act.purge { color: var(--danger); border-color: var(--danger); }
 
   /* ===== 公式模态（底部 sheet） ===== */
   .math-sheet {
@@ -431,14 +477,17 @@
   }
 
   /* ===== 图片/视频上下文菜单 ===== */
-  /* .att-wrap.thumbnails 模式：图片限高 140px，多个并排 */
-  .att-wrap.thumb .att-img { max-height: 140px; width: auto; max-width: 100%; cursor: zoom-in; object-fit: cover; border-radius: 6px; }
-  .att-wrap.thumb .att-video { max-height: 160px; cursor: zoom-in; }
+  /* .att-wrap.thumb 缩略图模式：图片限高 200px（稍大），多个并排 */
+  .att-wrap.thumb .att-img { max-height: 200px; width: auto; max-width: 100%; cursor: zoom-in; object-fit: cover; border-radius: 6px; }
+  .att-wrap.thumb .att-video { max-height: 220px; cursor: zoom-in; }
   /* 默认大图模式（覆盖 .att-wrap .att-img 的 220px 限制） */
-  .att-wrap .att-img { max-height: none; }
-  .att-wrap .att-video { max-height: none; }
-  /* 连续多个 .att-wrap.thumb 显示为横向并排 */
+  .att-wrap .att-img { max-height: none; -webkit-user-drag: none; }
+  .att-wrap .att-video { max-height: none; -webkit-user-drag: none; }
+  /* 缩略图模式：连续多张并排显示 */
   .att-wrap.thumb { display: inline-block; margin: 6px 4px; vertical-align: middle; }
+  /* 大图模式：块级独占一行 */
+  .att-wrap:not(.thumb) { display: block; margin: 0.8em 0; }
+
 </style>
 
 <script>
@@ -480,6 +529,7 @@
       <button class="btn" data-cmd="insertUnorderedList">• 列表</button>
       <button class="btn" data-cmd="insertOrderedList">1. 列表</button>
       <button class="btn" data-cmd="formatBlock" data-val="BLOCKQUOTE">引用</button>
+      <button class="btn" data-action="codeBlock">```</button>
     </div>
     <div class="tg">
       <span class="color-wrap" id="colorWrap">
@@ -501,7 +551,6 @@
       <button class="btn" data-action="table">表格</button>
       <button class="btn" data-action="todo">☑</button>
       <button class="btn" data-cmd="insertHorizontalRule">──</button>
-      <button class="btn" data-action="codeBlock">```</button>
     </div>
   </div>
 
@@ -531,6 +580,7 @@
     </select>
   </div>
   <ul class="sidebar-list" id="pageList"></ul>
+  <div class="sidebar-resizer" id="sidebarResizer"></div>
 </aside>
 
 <!-- 更多菜单 -->
@@ -540,8 +590,22 @@
   <div class="sheet-item" id="mImport"><span class="si-icon">📥</span>导入 .md 文件</div>
   <div class="sheet-item" id="mExport"><span class="si-icon">⬇</span>导出当前页为 .md</div>
   <div class="sheet-item" id="mSync"><span class="si-icon">☁</span>云同步设置</div>
+  <div class="sheet-item" id="mTrash"><span class="si-icon">🗑</span>垃圾箱</div>
   <div class="sheet-item" id="mTheme"><span class="si-icon">🌓</span><span class="theme-label">主题：跟随系统</span></div>
   <div class="sheet-cancel" id="mCancel">取消</div>
+</div>
+
+<!-- 垃圾箱 sheet -->
+<div class="overlay" id="trashOverlay"></div>
+<div class="sheet trash-sheet" id="trashSheet">
+  <div class="sheet-handle"></div>
+  <div class="trash-header">
+    <h3>🗑 垃圾箱</h3>
+    <button class="sb-btn danger" id="trashEmptyBtn">清空</button>
+  </div>
+  <div class="trash-tip">已删除的页面保留 3 个月，到期自动清理</div>
+  <ul class="trash-list" id="trashList"></ul>
+  <div class="sheet-cancel" id="trashCloseBtn">关闭</div>
 </div>
 
 <!-- 图片/视频 全屏 查看容器 -->
@@ -593,7 +657,7 @@ const DB_VERSION = 1;
 const LEGACY_LSK = 'md-notebook-mobile-v1';
 const ATT_MAX_SIZE = 50 * 1024 * 1024;
 const ATT_CACHE_LIMIT = 500 * 1024 * 1024;
-let state = { pages: [], currentId: null, deletedIds: {}, attachments: {} };
+let state = { pages: [], currentId: null, deletedIds: {}, attachments: {}, trash: [] };
 let saveTimer = null;
 let _db = null;
 
@@ -707,7 +771,14 @@ async function loadState() {
   if (!state.pages || !Array.isArray(state.pages)) state.pages = [];
   if (!state.deletedIds || typeof state.deletedIds !== 'object') state.deletedIds = {};
   if (!state.attachments || typeof state.attachments !== 'object') state.attachments = {};
+  if (!state.trash || !Array.isArray(state.trash)) state.trash = [];
   state.pages = state.pages.filter(p => !state.deletedIds[p.id]);
+  // 清理垃圾箱中超过 3 个月的条目
+  const TRASH_TTL = 3 * 30 * 24 * 60 * 60 * 1000; // 3 个月
+  const nowMs = Date.now();
+  const beforeTrash = state.trash.length;
+  state.trash = state.trash.filter(t => t && t.deletedAt && (nowMs - t.deletedAt) < TRASH_TTL);
+  if (state.trash.length !== beforeTrash) { /* 启动时静默清理过期项 */ }
   if (!state.pages.length) {
     const id = 'welcome-default';
     state.pages = [{ id, title: '欢迎使用', html: getDefaultHtml(), createdAt: Date.now(), updatedAt: Date.now() }];
@@ -753,10 +824,77 @@ const overlay = document.getElementById('overlay');
 const sidebar = document.getElementById('sidebar');
 
 /* ========== 侧边栏 ========== */
-function openSidebar() { sidebar.classList.add('open'); overlay.classList.add('show'); }
-function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('show'); }
-document.getElementById('menuBtn').addEventListener('click', openSidebar);
+// 电脑版：侧边栏常驻固定（pinned），可拖拉宽度；手机版：抽屉式打开/关闭
+const isDesktop = () => window.matchMedia('(min-width: 760px)').matches;
+const appEl = document.querySelector('.app');
+const SIDEBAR_W_KEY = 'md-notebook-sidebar-w';
+function applySidebarWidth(w) {
+  document.documentElement.style.setProperty('--sidebar-w', w + 'px');
+  if (isDesktop() && sidebar.classList.contains('pinned')) {
+    appEl.classList.add('has-sidebar');
+  }
+}
+function ensureSidebarPinned() {
+  if (isDesktop()) {
+    sidebar.classList.add('pinned'); sidebar.classList.remove('open');
+    overlay.classList.remove('show');
+    appEl.classList.add('has-sidebar');
+    const savedW = parseInt(localStorage.getItem(SIDEBAR_W_KEY) || '240', 10);
+    applySidebarWidth(savedW);
+  } else {
+    sidebar.classList.remove('pinned');
+    appEl.classList.remove('has-sidebar');
+    document.documentElement.style.removeProperty('--sidebar-w');
+  }
+}
+function openSidebar() {
+  if (isDesktop()) { ensureSidebarPinned(); return; }
+  sidebar.classList.add('open'); overlay.classList.add('show');
+}
+function closeSidebar() {
+  if (isDesktop()) { sidebar.classList.remove('pinned'); appEl.classList.remove('has-sidebar'); return; }
+  sidebar.classList.remove('open'); overlay.classList.remove('show');
+}
+// menuBtn：电脑版切换固定/收起；手机版打开抽屉
+document.getElementById('menuBtn').addEventListener('click', () => {
+  if (isDesktop()) {
+    if (sidebar.classList.contains('pinned')) closeSidebar();
+    else openSidebar();
+  } else openSidebar();
+});
 overlay.addEventListener('click', closeSidebar);
+// 初次加载与窗口尺寸变化时，切换 pinned/抽屉模式
+ensureSidebarPinned();
+window.addEventListener('resize', ensureSidebarPinned);
+
+/* ========== 侧边栏宽度拖拉（电脑版） ========== */
+(function () {
+  const resizer = document.getElementById('sidebarResizer');
+  let dragging = false, startX = 0, startW = 0;
+  resizer.addEventListener('mousedown', (e) => {
+    if (!isDesktop()) return;
+    dragging = true; startX = e.clientX;
+    startW = sidebar.getBoundingClientRect().width;
+    resizer.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    let w = startW + (e.clientX - startX);
+    if (w < 200) w = 200;
+    if (w > 480) w = 480;
+    applySidebarWidth(w);
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false; resizer.classList.remove('dragging');
+    document.body.style.cursor = ''; document.body.style.userSelect = '';
+    const w = sidebar.getBoundingClientRect().width;
+    localStorage.setItem(SIDEBAR_W_KEY, String(Math.round(w)));
+  });
+})();
 
 /* ========== 手机端边缘滑动呼出/关闭侧边栏 ========== */
 // 仅触屏设备生效；从左边缘 24px 内向右滑动 ≥50px 呼出；侧边栏打开时向左滑 ≥50px 关闭
@@ -892,7 +1030,10 @@ function newPage() {
 function deletePage(id) {
   const p = state.pages.find(x => x.id === id);
   if (!p) return;
-  if (!confirm(`删除页面「${p.title || '未命名'}」？此操作不可撤销。`)) return;
+  if (!confirm(`删除页面「${p.title || '未命名'}」？\n删除后可在垃圾箱找回（保留 3 个月）。`)) return;
+  // 移入垃圾箱（保留原页面数据 + 删除时间戳）
+  if (!state.trash) state.trash = [];
+  state.trash.push({ ...p, deletedAt: Date.now() });
   state.pages = state.pages.filter(x => x.id !== id);
   // 记录墓碑：用于多端同步时正确传递删除操作
   if (!state.deletedIds) state.deletedIds = {};
@@ -906,6 +1047,83 @@ function deletePage(id) {
   }
   renderPageList(); saveState(); scheduleSync();
 }
+
+/* ========== 垃圾箱 ========== */
+const TRASH_TTL_MS = 3 * 30 * 24 * 60 * 60 * 1000; // 3 个月
+function cleanExpiredTrash() {
+  if (!state.trash || !state.trash.length) return false;
+  const nowMs = Date.now();
+  const before = state.trash.length;
+  state.trash = state.trash.filter(t => t && t.deletedAt && (nowMs - t.deletedAt) < TRASH_TTL_MS);
+  return state.trash.length !== before;
+}
+function restoreFromTrash(idx) {
+  if (!state.trash || !state.trash[idx]) return;
+  const item = state.trash[idx];
+  // 去掉删除时间戳，恢复为普通页面
+  const { deletedAt, ...page } = item;
+  page.updatedAt = Date.now();
+  state.pages.push(page);
+  state.trash.splice(idx, 1);
+  // 清除墓碑，避免同步时又被删
+  if (state.deletedIds && state.deletedIds[page.id]) delete state.deletedIds[page.id];
+  renderPageList(); saveState(); scheduleSync();
+  closeTrashSheet();
+}
+function purgeFromTrash(idx) {
+  if (!state.trash || !state.trash[idx]) return;
+  const item = state.trash[idx];
+  if (!confirm(`彻底删除「${item.title || '未命名'}」？\n此操作不可撤销。`)) return;
+  state.trash.splice(idx, 1);
+  renderTrashList(); saveState(); scheduleSync();
+}
+function emptyTrash() {
+  if (!state.trash || !state.trash.length) return;
+  if (!confirm(`清空垃圾箱？共 ${state.trash.length} 个页面，此操作不可撤销。`)) return;
+  state.trash = [];
+  renderTrashList(); saveState(); scheduleSync();
+}
+function fmtDate(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function renderTrashList() {
+  const list = document.getElementById('trashList');
+  if (!list) return;
+  if (!state.trash || !state.trash.length) {
+    list.innerHTML = '<li class="empty-tip">垃圾箱为空</li>';
+    return;
+  }
+  // 按删除时间倒序
+  const arr = [...state.trash].map((t, i) => ({ t, i })).sort((a, b) => (b.t.deletedAt||0) - (a.t.deletedAt||0));
+  const nowMs = Date.now();
+  list.innerHTML = arr.map(({ t, i }) => {
+    const expireAt = (t.deletedAt || 0) + TRASH_TTL_MS;
+    const daysLeft = Math.max(0, Math.ceil((expireAt - nowMs) / (24*60*60*1000)));
+    return `<li class="trash-item" data-idx="${i}">
+      <div class="trash-info"><div class="trash-title">${escapeHtml(t.title || '未命名')}</div>
+      <div class="trash-meta">删除于 ${fmtDate(t.deletedAt)} · ${daysLeft} 天后自动清理</div></div>
+      <div class="trash-actions">
+        <button class="trash-act restore" data-idx="${i}" title="恢复">↩ 恢复</button>
+        <button class="trash-act purge" data-idx="${i}" title="彻底删除">✕</button>
+      </div>
+    </li>`;
+  }).join('');
+}
+function openTrashSheet() {
+  // 清理过期项后再展示
+  if (cleanExpiredTrash()) { saveState(); scheduleSync(); }
+  renderTrashList();
+  document.getElementById('trashOverlay').classList.add('show');
+  document.getElementById('trashSheet').classList.add('show');
+}
+function closeTrashSheet() {
+  document.getElementById('trashOverlay').classList.remove('show');
+  document.getElementById('trashSheet').classList.remove('show');
+}
+
 
 /* ========== 导入 ========== */
 document.getElementById('fileInput').addEventListener('change', (e) => {
@@ -1118,7 +1336,8 @@ async function insertAttachmentHtml(id, meta) {
   const mt = meta.type || '';
   let html = '';
   if (mt.startsWith('image/')) {
-    html = `<div class="att-wrap" data-att="${id}" contenteditable="false"><img class="att-img" alt="${escapeAttr(meta.filename)}"></div><p><br></p>`;
+    // 图片后跟行内 <br> 而非块级 <p>，让 thumb 缩略图模式能够横向并排
+    html = `<div class="att-wrap" data-att="${id}" contenteditable="false"><img class="att-img" alt="${escapeAttr(meta.filename)}"></div><br>`;
   } else if (mt.startsWith('video/')) {
     html = `<div class="att-wrap" data-att="${id}" contenteditable="false"><video class="att-video" controls playsinline></video></div><p><br></p>`;
   } else if (mt.startsWith('audio/')) {
@@ -1159,6 +1378,16 @@ document.getElementById('attachInput').addEventListener('change', (e) => {
   e.target.value = '';
 });
 // 点击文件附件下载/查看 或 点击图片/视频 lightbox 或 待办勾选切换
+// 阻止 canvas 内图片的原生拖拽（否则拖动图片到别处会复制出一份大图）
+canvas.addEventListener('dragstart', (e) => {
+  if (e.target && (e.target.classList.contains('att-img') || e.target.classList.contains('att-video'))) {
+    e.preventDefault();
+  }
+});
+// 阻止向 canvas 拖入文件/图片时的原生插入（避免产生无法管理的脏 img）
+canvas.addEventListener('dragover', (e) => { e.preventDefault(); });
+canvas.addEventListener('drop', (e) => { e.preventDefault(); });
+
 canvas.addEventListener('click', (e) => {
   // 1) 文件附件下载
   const attFile = e.target.closest('.att-file[data-att]');
@@ -1472,6 +1701,19 @@ document.getElementById('mCancel').addEventListener('click', closeMoreSheet);
 document.getElementById('mImport').addEventListener('click', () => { closeMoreSheet(); document.getElementById('fileInput').click(); });
 document.getElementById('mSync').addEventListener('click', () => { closeMoreSheet(); setTimeout(() => { try { openSyncSheet(); } catch(e){ alert('openSyncSheet: '+e.message); } }, 250); });
 document.getElementById('mTheme').addEventListener('click', cycleTheme);
+document.getElementById('mTrash').addEventListener('click', () => { closeMoreSheet(); setTimeout(() => openTrashSheet(), 200); });
+document.getElementById('trashOverlay').addEventListener('click', closeTrashSheet);
+document.getElementById('trashCloseBtn').addEventListener('click', closeTrashSheet);
+document.getElementById('trashEmptyBtn').addEventListener('click', emptyTrash);
+// 垃圾箱列表内的恢复/彻底删除按钮（事件委托）
+document.getElementById('trashList').addEventListener('click', (e) => {
+  const btn = e.target.closest('.trash-act');
+  if (!btn) return;
+  const idx = parseInt(btn.dataset.idx, 10);
+  if (isNaN(idx)) return;
+  if (btn.classList.contains('restore')) restoreFromTrash(idx);
+  else if (btn.classList.contains('purge')) purgeFromTrash(idx);
+});
 syncOverlay.addEventListener('click', closeSyncSheet);
 document.getElementById('syncClose').addEventListener('click', closeSyncSheet);
 document.getElementById('syncSave').addEventListener('click', () => {
@@ -1661,6 +1903,23 @@ async function syncInit() {
       }
     }
   }
+  // 合并垃圾箱：按 id 去重，取 deletedAt 较新；同时清理超过 3 个月的过期项
+  if (!state.trash) state.trash = [];
+  const cloudTrash = Array.isArray(cloud.trash) ? cloud.trash : [];
+  const trashMap = new Map();
+  state.trash.forEach(t => { if (t && t.id) trashMap.set(t.id, t); });
+  cloudTrash.forEach(t => {
+    if (!t || !t.id) return;
+    const ex = trashMap.get(t.id);
+    if (!ex) trashMap.set(t.id, t);
+    else if ((t.deletedAt||0) > (ex.deletedAt||0)) trashMap.set(t.id, t);
+  });
+  // 垃圾箱中移除已被恢复（重新出现在 pages）的页面
+  state.pages.forEach(p => trashMap.delete(p.id));
+  const TRASH_TTL_SYNC = 3 * 30 * 24 * 60 * 60 * 1000;
+  let trashArr = Array.from(trashMap.values()).filter(t => t.deletedAt && (now - t.deletedAt) < TRASH_TTL_SYNC);
+  if (trashArr.length !== state.trash.length) changed++;
+  state.trash = trashArr;
   if (!state.currentId || !state.pages.find(p=>p.id===state.currentId)) state.currentId = state.pages[0] ? state.pages[0].id : null;
   saveState(); renderPageList();
   const cur = state.pages.find(p => p.id === state.currentId);
@@ -1953,7 +2212,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v11';
+      const C='md-notebook-v12';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
