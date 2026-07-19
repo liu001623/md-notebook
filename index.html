@@ -409,6 +409,19 @@
   .math-actions button:active { background: var(--hover); }
   .math-actions button.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
 
+  /* 链接编辑面板专用：两个输入框 */
+  .link-field { margin-bottom: 10px; }
+  .link-field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .link-field input {
+    width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 15px; outline: none; background: var(--bg); color: var(--text);
+    box-sizing: border-box;
+  }
+  .link-field input:focus { border-color: var(--primary); }
+  .link-hint { font-size: 11px; color: var(--muted); margin: 4px 0 6px; line-height: 1.5; }
+  /* canvas 内链接样式增强：可点击感 */
+  #canvas a { text-decoration: underline; }
+
   input[type="file"] { display: none; }
 
   /* ===== 附件样式 ===== */
@@ -629,6 +642,26 @@
   <div class="math-actions">
     <button id="mathCancel">取消</button>
     <button class="primary" id="mathInsert">插入</button>
+  </div>
+</div>
+
+<!-- 链接编辑面板 -->
+<div class="overlay" id="linkOverlay"></div>
+<div class="math-sheet" id="linkSheet" style="top:auto;bottom:0">
+  <h3 id="linkSheetTitle">插入链接</h3>
+  <div class="link-field">
+    <label for="linkText">显示文字</label>
+    <input type="text" id="linkText" placeholder="例如：百度一下">
+  </div>
+  <div class="link-field">
+    <label for="linkUrl">链接地址</label>
+    <input type="url" id="linkUrl" placeholder="https://">
+  </div>
+  <div class="link-hint">电脑版：Ctrl+点击链接在新窗口打开；手机版：长按链接打开。<br>双击或长按已有链接可重新编辑名称和地址。</div>
+  <div class="math-actions">
+    <button id="linkRemove" style="display:none;color:var(--danger)">删除链接</button>
+    <button id="linkCancel">取消</button>
+    <button class="primary" id="linkOk">确定</button>
   </div>
 </div>
 
@@ -1193,7 +1226,7 @@ document.getElementById('toolbar').addEventListener('click', (e) => {
   if (cmd) return exec(cmd, val);
   if (action === 'mathInline') return openMathSheet(false);
   if (action === 'mathBlock') return openMathSheet(true);
-  if (action === 'link') { const u = prompt('链接地址：', 'https://'); if (u) exec('createLink', u); return; }
+  if (action === 'link') return openLinkSheet();
   if (action === 'attach') return document.getElementById('attachInput').click();
   if (action === 'table') return insertTable();
   if (action === 'todo') return insertTodoItem();
@@ -1917,6 +1950,126 @@ canvas.addEventListener('touchstart', (e) => {
 canvas.addEventListener('touchend', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } });
 canvas.addEventListener('touchmove', () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } });
 
+/* ========== 链接编辑面板 ========== */
+const linkSheet = document.getElementById('linkSheet');
+const linkOverlay = document.getElementById('linkOverlay');
+const linkSheetTitle = document.getElementById('linkSheetTitle');
+const linkTextInput = document.getElementById('linkText');
+const linkUrlInput = document.getElementById('linkUrl');
+const linkRemoveBtn = document.getElementById('linkRemove');
+let linkCtx = { editingEl: null, savedRange: null };
+
+function openLinkSheet(existingEl) {
+  linkCtx.editingEl = existingEl || null;
+  // 保存当前选区，用于稍后插入链接
+  const sel = window.getSelection();
+  if (!existingEl && sel && sel.rangeCount && canvas.contains(sel.anchorNode)) {
+    linkCtx.savedRange = sel.getRangeAt(0).cloneRange();
+    // 若有选中文本，预填到名称框
+    linkTextInput.value = sel.toString();
+  } else {
+    linkCtx.savedRange = null;
+    linkTextInput.value = '';
+  }
+  if (existingEl) {
+    linkSheetTitle.textContent = '编辑链接';
+    linkTextInput.value = existingEl.textContent;
+    linkUrlInput.value = existingEl.getAttribute('href') || '';
+    linkRemoveBtn.style.display = '';
+  } else {
+    linkSheetTitle.textContent = '插入链接';
+    if (!linkTextInput.value) linkTextInput.value = '';
+    linkUrlInput.value = 'https://';
+    linkRemoveBtn.style.display = 'none';
+  }
+  linkSheet.classList.add('show'); linkOverlay.classList.add('show');
+  setTimeout(() => { if (existingEl) linkUrlInput.focus(); else linkTextInput.focus(); }, 200);
+}
+function closeLinkSheet() {
+  linkSheet.classList.remove('show'); linkOverlay.classList.remove('show');
+  linkCtx.editingEl = null; linkCtx.savedRange = null;
+  linkTextInput.value = ''; linkUrlInput.value = '';
+}
+function applyLink() {
+  const text = linkTextInput.value.trim();
+  let url = linkUrlInput.value.trim();
+  if (!url) { closeLinkSheet(); return; }
+  // 补齐协议
+  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url)) url = 'https://' + url;
+  const el = linkCtx.editingEl;
+  if (el) {
+    // 编辑现有链接
+    el.setAttribute('href', url);
+    el.setAttribute('target', '_blank');
+    el.setAttribute('rel', 'noopener');
+    if (text) el.textContent = text;
+  } else {
+    // 新建链接
+    const a = document.createElement('a');
+    a.setAttribute('href', url);
+    a.setAttribute('target', '_blank');
+    a.setAttribute('rel', 'noopener');
+    a.textContent = text || url;
+    if (linkCtx.savedRange) {
+      linkCtx.savedRange.deleteContents();
+      linkCtx.savedRange.insertNode(a);
+      const after = document.createTextNode('\u00a0');
+      a.parentNode.insertBefore(after, a.nextSibling);
+      const r = document.createRange(); r.setStartAfter(after); r.collapse(true);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    } else {
+      insertHtmlAtCursor('');
+      canvas.appendChild(a); canvas.appendChild(document.createTextNode('\u00a0'));
+    }
+  }
+  saveCurrentPage(); closeLinkSheet();
+}
+document.getElementById('linkOk').addEventListener('click', applyLink);
+document.getElementById('linkCancel').addEventListener('click', closeLinkSheet);
+linkOverlay.addEventListener('click', closeLinkSheet);
+linkRemoveBtn.addEventListener('click', () => {
+  const el = linkCtx.editingEl;
+  if (el) {
+    // 删除链接但保留文字
+    const text = document.createTextNode(el.textContent);
+    el.parentNode.replaceChild(text, el);
+    saveCurrentPage();
+  }
+  closeLinkSheet();
+});
+// 链接跳转与编辑：电脑版 Ctrl+点击/中键 → 新窗口打开；双击 → 编辑；普通点击仍定位光标
+canvas.addEventListener('click', (e) => {
+  const a = e.target.closest('a');
+  if (!a) return;
+  // Ctrl/Cmd+点击 或 链接内非文本节点点击 → 打开
+  if (e.ctrlKey || e.metaKey) {
+    e.preventDefault(); e.stopPropagation();
+    const u = a.getAttribute('href'); if (u) window.open(u, '_blank');
+    return;
+  }
+});
+// 双击链接 → 编辑（电脑版）
+canvas.addEventListener('dblclick', (e) => {
+  const a = e.target.closest('a');
+  if (a) { e.preventDefault(); e.stopPropagation(); openLinkSheet(a); return; }
+});
+// 手机端：长按链接 → 选择"打开"或"编辑"
+let linkLongTimer = null;
+canvas.addEventListener('touchstart', (e) => {
+  const a = e.target.closest('a');
+  if (!a) return;
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+  linkLongTimer = setTimeout(() => {
+    e.preventDefault();
+    const u = a.getAttribute('href') || '';
+    const choice = confirm(`链接：${a.textContent}\n地址：${u}\n\n确定 = 新窗口打开\n取消 = 编辑链接`);
+    if (choice) { if (u) window.open(u, '_blank'); }
+    else { openLinkSheet(a); }
+  }, 500);
+}, { passive: false });
+canvas.addEventListener('touchend', () => { if (linkLongTimer) { clearTimeout(linkLongTimer); linkLongTimer = null; } });
+canvas.addEventListener('touchmove', () => { if (linkLongTimer) { clearTimeout(linkLongTimer); linkLongTimer = null; } });
+
 /* ========== 更多菜单 ========== */
 /* 提前声明同步面板相关变量，避免 TDZ 错误（原在 mSync 事件注册之后才声明导致中断脚本） */
 const syncSheet = document.getElementById('syncSheet'), syncOverlay = document.getElementById('syncOverlay');
@@ -2442,7 +2595,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v16';
+      const C='md-notebook-v17';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
