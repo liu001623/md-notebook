@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="MD笔记本">
-<meta name="theme-color" content="#2f80ed">
+<meta name="theme-color" content="#ffffff">
 <!-- iOS 主屏图标：内嵌 SVG data URI -->
 <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><rect width='180' height='180' fill='%232f80ed' rx='36'/><text x='90' y='120' font-size='100' text-anchor='middle' font-family='PingFang SC,Arial' fill='white' font-weight='bold'>M</text></svg>">
 <!-- manifest 内嵌 data URI，iOS 13+ 支持 -->
@@ -100,14 +100,15 @@
   .app {
     display: flex; flex-direction: column;
     height: 100vh; height: 100dvh;
-    padding-top: var(--safe-top);
     padding-bottom: var(--safe-bottom);
   }
 
-  /* ===== 顶栏 ===== */
+  /* ===== 顶栏（背景延伸覆盖状态栏区域，消除色差） ===== */
   .topbar {
     display: flex; align-items: center; gap: 8px;
-    padding: 8px 10px; background: var(--panel);
+    padding: 8px 10px;
+    padding-top: calc(var(--safe-top) + 8px);
+    background: var(--panel);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
@@ -1902,6 +1903,14 @@ function applyTheme() {
   document.documentElement.setAttribute('data-theme', actual);
   const labels = { auto: '跟随系统', light: '浅色', dark: '深色' };
   document.querySelectorAll('.theme-label').forEach(el => { el.textContent = '主题：' + labels[mode]; });
+  // 同步浏览器状态栏主题色：浅色模式白底深字，暗色模式深底白字，与顶栏融为一体
+  const themeColor = actual === 'dark' ? '#1f2638' : '#ffffff';
+  let tcMeta = document.querySelector('meta[name="theme-color"]');
+  if (!tcMeta) { tcMeta = document.createElement('meta'); tcMeta.setAttribute('name', 'theme-color'); document.head.appendChild(tcMeta); }
+  tcMeta.setAttribute('content', themeColor);
+  let sBarMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+  if (!sBarMeta) { sBarMeta = document.createElement('meta'); sBarMeta.setAttribute('name', 'apple-mobile-web-app-status-bar-style'); document.head.appendChild(sBarMeta); }
+  sBarMeta.setAttribute('content', actual === 'dark' ? 'black-translucent' : 'default');
   // 主题切换后重建高亮色板，使其跟随当前主题
   if (typeof rebuildHighlightSwatches === 'function') rebuildHighlightSwatches();
 }
@@ -1934,7 +1943,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v7';
+      const C='md-notebook-v8';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
