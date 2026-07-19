@@ -235,20 +235,16 @@
   }
   #canvas th { background: var(--th-bg); }
   /* 表格块包装层：自身无额外间距，交给内部 table 控制 */
-  #canvas .table-block { margin: .4em 0; position: relative; display: flex; flex-direction: column; }
-  /* 表格底部高度调节把手：拖动改变容器可视高度，内容不变。sticky 保证始终可见 */
-  .table-resize-handle {
-    height: 10px; margin: 0; cursor: row-resize; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    position: sticky; bottom: 0; background: var(--canvas-bg); z-index: 2;
-    opacity: 0; transition: opacity .2s;
+  #canvas .table-block { margin: .4em 0; }
+  /* 表格底部高度调节浮动指示条（fixed 定位，不受 overflow 裁剪，始终可见） */
+  #tableResizeIndicator {
+    position: fixed; height: 6px; display: none; align-items: center; justify-content: center;
+    pointer-events: none; z-index: 100;
   }
-  .table-block:hover .table-resize-handle { opacity: 1; }
-  .table-resize-handle::after {
+  #tableResizeIndicator::after {
     content: ''; display: block; width: 48px; height: 4px;
-    background: var(--muted); border-radius: 2px; opacity: .6;
+    background: var(--primary); border-radius: 2px; opacity: .7;
   }
-  .table-resize-handle:hover::after { background: var(--primary); opacity: 1; }
   #canvas img { max-width: 100%; border-radius: 6px; }
   #canvas mark { background: var(--mark-bg); color: inherit; padding: 0 2px; border-radius: 2px; }
   /* 隶属于 .att-wrap 的图片/视频以缩略图形式呈现，点击 lightbox 放大 */
@@ -602,11 +598,12 @@
     </div>
   </div>
 
-  <div class="canvas-wrap">
-    <div id="canvas" contenteditable="true" spellcheck="false" data-placeholder="点击此处开始编写…"></div>
-  </div>
+   <div class="canvas-wrap">
+     <div id="canvas" contenteditable="true" spellcheck="false" data-placeholder="点击此处开始编写…"></div>
+   </div>
+   <div id="tableResizeIndicator"></div>
 
-  <div class="statusbar">
+   <div class="statusbar">
     <span id="statLeft">页面数: 0</span>
     <span id="statRight">就绪</span>
   </div>
@@ -1360,7 +1357,7 @@ function insertTable() {
   let h = '<div class="table-block" data-tid="' + tid + '" contenteditable="false">';
   h += '<table contenteditable="true"><thead><tr>'; for (let c=0;c<3;c++) h += '<th>标题'+(c+1)+'</th>';
   h += '</tr></thead><tbody>'; for (let r=0;r<2;r++){ h+='<tr>'; for(let c=0;c<3;c++) h+='<td>&nbsp;</td>'; h+='</tr>'; }
-  h += '</tbody></table><div class="table-resize-handle"></div></div><p><br></p>';
+  h += '</tbody></table></div><p><br></p>';
   insertHtmlAtCursor(h);
 }
 // 把 canvas 内不在 .table-block 内的裸 <table> 自动包一层 .table-block
@@ -1393,12 +1390,6 @@ function wrapBareTables() {
     if (blk.getAttribute('contenteditable') !== 'false') blk.setAttribute('contenteditable', 'false');
     const tbl = blk.querySelector('table');
     if (tbl && tbl.getAttribute('contenteditable') !== 'true') tbl.setAttribute('contenteditable', 'true');
-    // 确保有高度调节把手
-    if (!blk.querySelector('.table-resize-handle')) {
-      const handle = document.createElement('div');
-      handle.className = 'table-resize-handle';
-      blk.appendChild(handle);
-    }
     // 恢复已有的固定高度设置（页面保存时 data-th 记录了用户设定的高度）
     const th = blk.getAttribute('data-th');
     if (th) {
@@ -1796,12 +1787,39 @@ function endRowResize() {
 }
 /* ========== 表格底部把手调整容器可视高度 ========== */
 let tableResize = null; // { block, startY, startHeight }
+/* ========== 表格底部边缘拖动调整容器可视高度 ========== */
+let tableResize = null; // { block, startY, startHeight }
+const resizeIndicator = () => document.getElementById('tableResizeIndicator');
+// 判断鼠标是否在某个 .table-block 的底部边缘 14px 区域内（纯坐标计算，不依赖把手 DOM）
+function getTableAtBottom(e) {
+  const blocks = canvas.querySelectorAll('.table-block');
+  for (const blk of blocks) {
+    const r = blk.getBoundingClientRect();
+    if (e.clientX >= r.left && e.clientX <= r.right &&
+        e.clientY >= r.bottom - 14 && e.clientY <= r.bottom + 6) {
+      return blk;
+    }
+  }
+  return null;
+}
+// 显示/隐藏浮动指示条
+function showResizeIndicator(block) {
+  const ind = resizeIndicator(); if (!ind || !block) return;
+  const r = block.getBoundingClientRect();
+  ind.style.display = 'flex';
+  ind.style.left = (r.left + r.width / 2 - 24) + 'px';
+  ind.style.top = (r.bottom - 3) + 'px';
+}
+function hideResizeIndicator() {
+  const ind = resizeIndicator(); if (ind) ind.style.display = 'none';
+}
 function startTableHeightDrag(block, clientY) {
   let h = parseInt(block.getAttribute('data-th')) || block.offsetHeight;
   if (h < 60) h = 60;
   tableResize = { block, startY: clientY, startHeight: h };
   block.style.height = h + 'px';
   block.style.overflow = 'hidden';
+  hideResizeIndicator();
   return true;
 }
 function moveTableHeightDrag(clientY) {
@@ -1815,7 +1833,6 @@ function moveTableHeightDrag(clientY) {
 function endTableHeightDrag() {
   if (!tableResize) return;
   const block = tableResize.block;
-  // 如果高度 >= 内容自然高度 + 10px，去掉固定高度（避免不必要的滚动条）
   const tbl = block.querySelector('table');
   if (tbl) {
     const contentH = tbl.scrollHeight;
@@ -1838,9 +1855,14 @@ canvas.addEventListener('mousemove', (e) => {
   if (colResize) { moveColResize(e.clientX); return; }
   if (rowResize) { moveRowResize(e.clientY); return; }
   if (tableResize) { moveTableHeightDrag(e.clientY); return; }
-  // 检查是否悬停在表格高度调节把手上
-  const handle = e.target.closest ? e.target.closest('.table-resize-handle') : null;
-  if (handle) { document.body.style.cursor = 'row-resize'; return; }
+  // 检查是否悬停在表格底部边缘（容器高度调节区域）
+  const blk = getTableAtBottom(e);
+  if (blk) {
+    document.body.style.cursor = 'row-resize';
+    showResizeIndicator(blk);
+    return;
+  }
+  hideResizeIndicator();
   document.body.style.cursor = '';
   const cell = e.target.closest('td, th');
   if (!cell) return;
@@ -1848,18 +1870,15 @@ canvas.addEventListener('mousemove', (e) => {
   cell.style.cursor = edge === 'right' ? 'col-resize' : (edge === 'bottom' ? 'row-resize' : '');
 });
 canvas.addEventListener('mousedown', (e) => {
-  // 优先检查表格高度调节把手：点中底部把手 → 启动容器高度拖动
-  const handle = e.target.closest ? e.target.closest('.table-resize-handle') : null;
-  if (handle) {
-    const block = handle.closest('.table-block');
-    if (block) {
-      e.preventDefault();
-      if (startTableHeightDrag(block, e.clientY)) {
-        document.body.style.cursor = 'row-resize';
-        document.body.style.userSelect = 'none';
-      }
-      return;
+  // 优先检查表格底部边缘 → 启动容器高度拖动
+  const blk = getTableAtBottom(e);
+  if (blk) {
+    e.preventDefault();
+    if (startTableHeightDrag(blk, e.clientY)) {
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
     }
+    return;
   }
   const cell = e.target.closest('td, th');
   if (!cell) return;
@@ -1884,19 +1903,16 @@ document.addEventListener('mousemove', (e) => {
   else if (tableResize) moveTableHeightDrag(e.clientY);
 });
 document.addEventListener('mouseup', () => { if (colResize) endColResize(); else if (rowResize) endRowResize(); else if (tableResize) endTableHeightDrag(); });
-// 手机长按表格 → 菜单；但触摸单元格边缘时优先列宽/行高拖拉；触摸把手 → 容器高度调节
+// 手机触摸：长按表格 → 菜单；触摸边缘 → 列宽/行高拖拉；触摸底部边缘 → 容器高度调节
 canvas.addEventListener('touchstart', (e) => {
   const touch = e.touches[0];
-  // 优先检查表格高度调节把手
-  const handle = e.target.closest ? e.target.closest('.table-resize-handle') : null;
-  if (handle) {
-    const block = handle.closest('.table-block');
-    if (block) {
-      e.preventDefault();
-      clearTimeout(tableCtxTimer);
-      startTableHeightDrag(block, touch.clientY);
-      return;
-    }
+  // 优先检查表格底部边缘
+  const blk = getTableAtBottom(touch);
+  if (blk) {
+    e.preventDefault();
+    clearTimeout(tableCtxTimer);
+    startTableHeightDrag(blk, touch.clientY);
+    return;
   }
   const cell = e.target.closest('td, th');
   if (!cell) return;
