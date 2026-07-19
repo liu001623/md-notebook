@@ -235,19 +235,20 @@
   }
   #canvas th { background: var(--th-bg); }
   /* 表格块包装层：自身无额外间距，交给内部 table 控制 */
-  #canvas .table-block { margin: .4em 0; position: relative; }
-  /* 表格底部高度调节把手：拖动改变容器可视高度，内容不变 */
+  #canvas .table-block { margin: .4em 0; position: relative; display: flex; flex-direction: column; }
+  /* 表格底部高度调节把手：拖动改变容器可视高度，内容不变。sticky 保证始终可见 */
   .table-resize-handle {
-    height: 8px; margin: 2px 0 -2px; cursor: row-resize;
+    height: 10px; margin: 0; cursor: row-resize; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
+    position: sticky; bottom: 0; background: var(--canvas-bg); z-index: 2;
     opacity: 0; transition: opacity .2s;
   }
   .table-block:hover .table-resize-handle { opacity: 1; }
   .table-resize-handle::after {
-    content: ''; display: block; width: 40px; height: 3px;
-    background: var(--muted); border-radius: 2px; opacity: .5;
+    content: ''; display: block; width: 48px; height: 4px;
+    background: var(--muted); border-radius: 2px; opacity: .6;
   }
-  .table-resize-handle:hover::after { background: var(--primary); opacity: .8; }
+  .table-resize-handle:hover::after { background: var(--primary); opacity: 1; }
   #canvas img { max-width: 100%; border-radius: 6px; }
   #canvas mark { background: var(--mark-bg); color: inherit; padding: 0 2px; border-radius: 2px; }
   /* 隶属于 .att-wrap 的图片/视频以缩略图形式呈现，点击 lightbox 放大 */
@@ -1796,12 +1797,11 @@ function endRowResize() {
 /* ========== 表格底部把手调整容器可视高度 ========== */
 let tableResize = null; // { block, startY, startHeight }
 function startTableHeightDrag(block, clientY) {
-  // 获取当前高度：已有 data-th 用它，否则用 offsetHeight 作为起始值
   let h = parseInt(block.getAttribute('data-th')) || block.offsetHeight;
   if (h < 60) h = 60;
   tableResize = { block, startY: clientY, startHeight: h };
   block.style.height = h + 'px';
-  block.style.overflow = 'auto';
+  block.style.overflow = 'hidden';
   return true;
 }
 function moveTableHeightDrag(clientY) {
@@ -1824,6 +1824,8 @@ function endTableHeightDrag() {
       block.style.height = '';
       block.style.overflow = '';
       block.removeAttribute('data-th');
+    } else {
+      block.style.overflow = 'auto';
     }
   }
   tableResize = null;
