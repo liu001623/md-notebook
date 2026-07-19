@@ -225,7 +225,14 @@
   #canvas a { color: var(--primary); word-break: break-all; }
   #canvas hr { border: none; border-top: 1px dashed var(--border); margin: 1.4em 0; }
   #canvas table { border-collapse: collapse; margin: .4em 0; max-width: 100%; width: 100%; display: block; overflow-x: auto; word-break: break-word; }
-  #canvas th, #canvas td { border: 1px solid var(--border); padding: 3px 7px; font-size: .94em; line-height: 1.35; word-break: break-word; overflow-wrap: anywhere; box-sizing: border-box; }
+  #canvas th, #canvas td,
+  #canvas .table-block th, #canvas .table-block td {
+    border: 1px solid var(--border);
+    padding: 3px 7px !important;
+    font-size: .94em;
+    line-height: 1.35 !important;
+    word-break: break-word; overflow-wrap: anywhere; box-sizing: border-box;
+  }
   #canvas th { background: var(--th-bg); }
   /* 表格块包装层：自身无额外间距，交给内部 table 控制 */
   #canvas .table-block { margin: .4em 0; }
@@ -1355,6 +1362,16 @@ function wrapBareTables() {
     div.setAttribute('data-tid', 'tbl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6));
     parent.insertBefore(div, t);
     div.appendChild(t);
+  });
+  // 清理所有 td/th 的内联 padding / line-height，避免从外部粘贴或旧数据带来的过大间距
+  // （外部 HTML 表格常自带 style="padding:12px"，会覆盖我们的紧凑样式）
+  canvas.querySelectorAll('td, th').forEach(c => {
+    c.style.padding = '';
+    c.style.paddingTop = '';
+    c.style.paddingBottom = '';
+    c.style.paddingLeft = '';
+    c.style.paddingRight = '';
+    c.style.lineHeight = '';
   });
 }
 // 表格操作：在光标所在的 cell 上执行指定动作
@@ -2723,6 +2740,12 @@ function findUndeletableBlockBeforeNode(node) {
   while (cur && cur !== canvas) {
     let prev = cur.previousSibling;
     while (prev) {
+      // 先递归看 prev 内部是否含有不可编辑块（处理 <p><div class="att-wrap">​</p> 这种
+      // 容器文本为空但内含图片附件的情况——isBlankNode 会把它判为空而错误跳过）
+      if (prev.nodeType === 1) {
+        const inner = prev.querySelector('.att-wrap, .table-block, .math-block, .math-inline, pre, .todo-item');
+        if (inner) return inner;
+      }
       if (isBlankNode(prev)) { prev = prev.previousSibling; continue; }
       if (prev.nodeType === 1 && isUndeletableBlock(prev)) return prev;
       return null;
@@ -2758,6 +2781,11 @@ function findUndeletableBlockAfterNode(node) {
   while (cur && cur !== canvas) {
     let next = cur.nextSibling;
     while (next) {
+      // 先递归看 next 内部是否含有不可编辑块
+      if (next.nodeType === 1) {
+        const inner = next.querySelector('.att-wrap, .table-block, .math-block, .math-inline, pre, .todo-item');
+        if (inner) return inner;
+      }
       if (isBlankNode(next)) { next = next.nextSibling; continue; }
       if (next.nodeType === 1 && isUndeletableBlock(next)) return next;
       return null;
@@ -2829,7 +2857,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v20';
+      const C='md-notebook-v21';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
