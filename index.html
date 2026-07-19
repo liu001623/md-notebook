@@ -1016,6 +1016,9 @@ function renderPageList() {
 /* ========== 搜索/排序/置顶 ========== */
 const searchInput = document.getElementById('searchInput');
 const sortSelect = document.getElementById('sortSelect');
+// 恢复上次选择的排序方式
+const savedSort = localStorage.getItem('mdnb-sort');
+if (savedSort) sortSelect.value = savedSort;
 let lastViewed = {};
 function getPageText(p) {
   const tmp = document.createElement('div');
@@ -1042,7 +1045,7 @@ function togglePin(id) {
 }
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 searchInput.addEventListener('input', renderPageList);
-sortSelect.addEventListener('change', renderPageList);
+sortSelect.addEventListener('change', () => { localStorage.setItem('mdnb-sort', sortSelect.value); renderPageList(); });
 
 function switchPage(id) {
   saveCurrentPage();
