@@ -2581,6 +2581,11 @@ canvas.addEventListener('paste', (e) => {
 });
 
 canvas.addEventListener('keydown', (e) => {
+  // 修复：canvas 最开头或其他位置的不可编辑块（图片/视频/附件/表格/公式/代码块/待办）
+  // 用 Backspace/Delete 删不掉的 bug——contenteditable=false 元素无法被默认行为跨过删除
+  if (e.key === 'Backspace' || e.key === 'Delete') {
+    if (handleUndeletableBlockKey(e)) return;
+  }
   if (e.ctrlKey || e.metaKey) {
     const k = e.key.toLowerCase();
     if (k === 'b') { e.preventDefault(); exec('bold'); }
@@ -2632,6 +2637,129 @@ canvas.addEventListener('keydown', (e) => {
 });
 
 function escapeAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* ========== 不可编辑块删除修复 ==========
+   contenteditable=false 的元素（图片附件、表格块、公式、代码块、待办项）位于 canvas
+   开头或紧邻光标时，Backspace/Delete 默认行为无法删除，这里手动接管。
+   规则：折叠选区 + 光标紧邻不可编辑块 + 光标与块之间只有空白文本/<br> → 手动删除该块。
+*/
+function isUndeletableBlock(el) {
+  if (!el || el.nodeType !== 1) return false;
+  return el.classList.contains('att-wrap') ||
+         el.classList.contains('table-block') ||
+         el.classList.contains('math-block') ||
+         el.classList.contains('math-inline') ||
+         el.tagName === 'PRE' ||
+         el.classList.contains('todo-item');
+}
+function isBlankNode(n) {
+  if (!n) return false;
+  if (n.nodeType === 3) return n.textContent === '';
+  if (n.nodeType === 1) {
+    if (n.tagName === 'BR') return true;
+    // 空的 <p></p> 或 <p><br></p> 也视为空白
+    if (n.tagName === 'P') return n.textContent === '' || n.innerHTML === '<br>' || n.innerHTML === '<br/>';
+  }
+  return false;
+}
+function handleUndeletableBlockKey(e) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return false;
+  // 有选区时让浏览器默认处理（用户主动拖选的话通常能删）
+  if (!sel.isCollapsed) return false;
+  const range = sel.getRangeAt(0);
+  let target = null;
+  if (e.key === 'Backspace') target = getBlockBeforeCaret(range);
+  else if (e.key === 'Delete') target = getBlockAfterCaret(range);
+  if (!target) return false;
+  e.preventDefault();
+  snapshotCanvas();
+  const newRange = document.createRange();
+  if (e.key === 'Delete') newRange.setStartBefore(target);
+  else newRange.setStartAfter(target);
+  newRange.collapse(true);
+  target.remove();
+  // 清理已变空的 <p><br></p> 残留，避免一个永远删不掉的空行
+  const cur2 = newRange.startContainer;
+  if (cur2 && cur2.nodeType === 1 && cur2.tagName === 'P' && (cur2.innerHTML === '<br>' || cur2.innerHTML === '<br/>')) {
+    // 不强制删除，保留一个空行供用户继续输入；但若是 canvas 第一个子节点且 canvas 只有它，清空让其显示占位符
+  }
+  sel.removeAllRanges();
+  sel.addRange(newRange);
+  saveCurrentPage();
+  return true;
+}
+// 找光标前面紧邻的不可编辑块（用于 Backspace）
+function getBlockBeforeCaret(range) {
+  const container = range.startContainer;
+  const offset = range.startOffset;
+  if (container.nodeType === 3) {
+    if (offset > 0) {
+      const beforeText = container.textContent.substring(0, offset);
+      if (beforeText.trim() !== '') return null; // 前面有可见文字 → 让浏览器先删文字
+    }
+    return findUndeletableBlockBeforeNode(container);
+  }
+  if (container.nodeType === 1) {
+    for (let i = offset - 1; i >= 0; i--) {
+      const child = container.childNodes[i];
+      if (isBlankNode(child)) continue;
+      if (child.nodeType === 1 && isUndeletableBlock(child)) return child;
+      return null; // 其他非空内容 → 不处理
+    }
+    return findUndeletableBlockBeforeNode(container);
+  }
+  return null;
+}
+// 从某节点向上找前一个不可编辑块（跨层级，路径上只能经过空白节点）
+function findUndeletableBlockBeforeNode(node) {
+  let cur = node;
+  while (cur && cur !== canvas) {
+    let prev = cur.previousSibling;
+    while (prev) {
+      if (isBlankNode(prev)) { prev = prev.previousSibling; continue; }
+      if (prev.nodeType === 1 && isUndeletableBlock(prev)) return prev;
+      return null;
+    }
+    cur = cur.parentNode;
+  }
+  return null;
+}
+// 找光标后面紧邻的不可编辑块（用于 Delete）
+function getBlockAfterCaret(range) {
+  const container = range.startContainer;
+  const offset = range.startOffset;
+  if (container.nodeType === 3) {
+    if (offset < container.textContent.length) {
+      const afterText = container.textContent.substring(offset);
+      if (afterText.trim() !== '') return null;
+    }
+    return findUndeletableBlockAfterNode(container);
+  }
+  if (container.nodeType === 1) {
+    for (let i = offset; i < container.childNodes.length; i++) {
+      const child = container.childNodes[i];
+      if (isBlankNode(child)) continue;
+      if (child.nodeType === 1 && isUndeletableBlock(child)) return child;
+      return null;
+    }
+    return findUndeletableBlockAfterNode(container);
+  }
+  return null;
+}
+function findUndeletableBlockAfterNode(node) {
+  let cur = node;
+  while (cur && cur !== canvas) {
+    let next = cur.nextSibling;
+    while (next) {
+      if (isBlankNode(next)) { next = next.nextSibling; continue; }
+      if (next.nodeType === 1 && isUndeletableBlock(next)) return next;
+      return null;
+    }
+    cur = cur.parentNode;
+  }
+  return null;
+}
 
 /* ========== 阻止双指缩放（iOS PWA 全屏体验） ========== */
 document.addEventListener('gesturestart', (e) => e.preventDefault());
@@ -2695,7 +2823,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v18';
+      const C='md-notebook-v19';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
