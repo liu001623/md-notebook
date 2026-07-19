@@ -1586,12 +1586,6 @@ async function renderAttachments() {
       }
     }
   }
-        if (cPath) {
-          media.src = 'https://raw.githubusercontent.com/' + GH.owner + '/' + GH.repo + '/main/' + cPath;
-        }
-      }
-    }
-  }
   // v13 兼容：清理两个相邻 att-wrap 之间的孤立裸 <br>，让旧数据也能并排（幂等，无需保存）
   canvas.querySelectorAll('.att-wrap + br').forEach(br => {
     const next = br.nextElementSibling;
