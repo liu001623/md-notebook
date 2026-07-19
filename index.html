@@ -126,12 +126,23 @@
   }
   #pageTitle:focus { background: var(--panel); border-color: var(--primary); }
 
-  /* ===== 工具栏（自动换行，所有按钮始终可见） ===== */
+  /* ===== 工具栏 ===== */
+  /* 默认（手机/窄屏）：单行横向滑动 */
   .toolbar {
-    display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 10px;
+    display: flex; gap: 6px; padding: 6px 10px;
     background: var(--panel); border-bottom: 1px solid var(--border);
-    overflow: visible;
-    flex-shrink: 0;
+    overflow-x: auto; overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    flex-shrink: 0; scrollbar-width: none;
+  }
+  .toolbar::-webkit-scrollbar { display: none; }
+  /* 电脑/宽屏（≥760px）：自动换行，展示全部按键 */
+  @media (min-width: 760px) {
+    .toolbar {
+      flex-wrap: wrap; overflow: visible;
+      scrollbar-width: auto;
+    }
+    .toolbar::-webkit-scrollbar { display: block; height: 6px; }
   }
   .tg {
     display: flex; gap: 1px; padding: 2px;
@@ -162,7 +173,7 @@
 
   /* ===== 画布 ===== */
   .canvas-wrap {
-    flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
     padding: 16px 12px;
   }
   #canvas {
@@ -199,8 +210,8 @@
   #canvas pre code { background: transparent; color: inherit; padding: 0; white-space: pre; }
   #canvas a { color: var(--primary); word-break: break-all; }
   #canvas hr { border: none; border-top: 1px dashed var(--border); margin: 1.4em 0; }
-  #canvas table { border-collapse: collapse; margin: 1em 0; max-width: 100%; display: block; overflow-x: auto; }
-  #canvas th, #canvas td { border: 1px solid var(--border); padding: 6px 10px; font-size: .95em; }
+  #canvas table { border-collapse: collapse; margin: 1em 0; max-width: 100%; display: block; overflow-x: auto; word-break: break-word; }
+  #canvas th, #canvas td { border: 1px solid var(--border); padding: 6px 10px; font-size: .95em; word-break: break-word; overflow-wrap: anywhere; }
   #canvas th { background: var(--th-bg); }
   #canvas img { max-width: 100%; border-radius: 6px; }
   #canvas mark { background: var(--mark-bg); color: inherit; padding: 0 2px; border-radius: 2px; }
@@ -713,7 +724,7 @@ function getDefaultHtml() {
 <span class="math-block" data-latex="\\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}" contenteditable="false"></span>
 <h2>使用提示</h2>
 <ol>
-<li>选中文字后点工具栏按钮应用样式（窗口变窄时工具栏自动换行，所有按钮始终可见）</li>
+<li>选中文字后点工具栏按钮应用样式（手机端可横滑，电脑端窗口变窄时工具栏自动换行）</li>
 <li>点右上角 ⋯ 打开菜单：新建/导入/导出/删除</li>
 <li><strong>双击公式</strong>可重新编辑 LaTeX 源码</li>
 <li>可「添加到主屏幕」当 App 用，全屏体验</li>
@@ -736,6 +747,36 @@ function openSidebar() { sidebar.classList.add('open'); overlay.classList.add('s
 function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('show'); }
 document.getElementById('menuBtn').addEventListener('click', openSidebar);
 overlay.addEventListener('click', closeSidebar);
+
+/* ========== 手机端边缘滑动呼出/关闭侧边栏 ========== */
+// 仅触屏设备生效；从左边缘 24px 内向右滑动 ≥50px 呼出；侧边栏打开时向左滑 ≥50px 关闭
+(function () {
+  let sx = 0, sy = 0, tracking = false, edgeStart = false;
+  const EDGE = 24, THRESHOLD = 50;
+  document.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    sx = t.clientX; sy = t.clientY;
+    // 侧边栏打开时，任意位置起步都可左滑关闭；关闭时，仅左边缘起步可右滑呼出
+    edgeStart = sidebar.classList.contains('open') ? true : (sx <= EDGE);
+    tracking = true;
+  }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (!tracking) return;
+    tracking = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - sx;
+    const dy = t.clientY - sy;
+    // 横向位移明显大于纵向才认定为横向滑动
+    if (Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const opened = sidebar.classList.contains('open');
+    if (!opened && edgeStart && dx >= THRESHOLD) {
+      openSidebar();
+    } else if (opened && dx <= -THRESHOLD) {
+      closeSidebar();
+    }
+  }, { passive: true });
+})();
 
 function renderPageList() {
   pageList.innerHTML = '';
@@ -1893,7 +1934,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v6';
+      const C='md-notebook-v7';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
