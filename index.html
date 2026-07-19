@@ -477,8 +477,8 @@
   }
 
   /* ===== 图片/视频上下文菜单 ===== */
-  /* .att-wrap.thumb 缩略图模式：图片限高 200px（稍大），多个并排 */
-  .att-wrap.thumb .att-img { max-height: 200px; width: auto; max-width: 100%; cursor: zoom-in; object-fit: cover; border-radius: 6px; }
+  /* .att-wrap.thumb 缩略图模式：图片限高 260px（再大一点），多个并排，按页面宽度自动换行 */
+  .att-wrap.thumb .att-img { max-height: 260px; width: auto; max-width: 100%; cursor: zoom-in; object-fit: cover; border-radius: 6px; }
   .att-wrap.thumb .att-video { max-height: 220px; cursor: zoom-in; }
   /* 默认大图模式（覆盖 .att-wrap .att-img 的 220px 限制） */
   .att-wrap .att-img { max-height: none; -webkit-user-drag: none; }
@@ -1336,8 +1336,9 @@ async function insertAttachmentHtml(id, meta) {
   const mt = meta.type || '';
   let html = '';
   if (mt.startsWith('image/')) {
-    // 图片后跟行内 <br> 而非块级 <p>，让 thumb 缩略图模式能够横向并排
-    html = `<div class="att-wrap" data-att="${id}" contenteditable="false"><img class="att-img" alt="${escapeAttr(meta.filename)}"></div><br>`;
+    // 默认 thumb 模式：多个图片天然并排，按页面宽度自动换行
+    // 后跟零宽空格 \u200b 作为光标锚点（不强制换行、不占视觉宽度）
+    html = `<div class="att-wrap thumb" data-att="${id}" contenteditable="false"><img class="att-img" alt="${escapeAttr(meta.filename)}"></div>\u200b`;
   } else if (mt.startsWith('video/')) {
     html = `<div class="att-wrap" data-att="${id}" contenteditable="false"><video class="att-video" controls playsinline></video></div><p><br></p>`;
   } else if (mt.startsWith('audio/')) {
@@ -1372,6 +1373,11 @@ async function renderAttachments() {
       }
     }
   }
+  // v13 兼容：清理两个相邻 att-wrap 之间的孤立裸 <br>，让旧数据也能并排（幂等，无需保存）
+  canvas.querySelectorAll('.att-wrap + br').forEach(br => {
+    const next = br.nextElementSibling;
+    if (next && next.classList && next.classList.contains('att-wrap')) br.remove();
+  });
 }
 document.getElementById('attachInput').addEventListener('change', (e) => {
   if (e.target.files && e.target.files.length) handleAttachments(e.target.files);
@@ -1522,11 +1528,15 @@ function showMediaCtxMenu(wrap, x, y) {
   const isThumb = wrap.classList.contains('thumb');
   const menu = document.createElement('div');
   menu.className = 'table-ctx-menu'; // 复用同一套样式
-  menu.innerHTML = '<div class="ctx-title">图片/视频大小</div>'
+  const isVideo = !!wrap.querySelector('video');
+  const kindLabel = isVideo ? '视频' : '图片';
+  menu.innerHTML = '<div class="ctx-title">' + kindLabel + '</div>'
     + (isThumb ? '<div class="ctx-item" data-mt="big">🖼️ 切换为大图</div>' : '<div class="ctx-item" data-mt="thumb">🔲 切换为缩略图（并排）</div>')
     + '<div class="ctx-item" data-mt="lightbox">🔍 全屏查看</div>'
     + '<div class="ctx-sep"></div>'
-    + '<div class="ctx-item" data-mt="apply-all-' + (isThumb ? 'big' : 'thumb') + '">应用到本页全部</div>';
+    + '<div class="ctx-item" data-mt="apply-all-' + (isThumb ? 'big' : 'thumb') + '">应用到本页全部</div>'
+    + '<div class="ctx-sep"></div>'
+    + '<div class="ctx-item danger" data-mt="delete">🗑 删除此' + kindLabel + '</div>';
   document.body.appendChild(menu);
   const rect = menu.getBoundingClientRect();
   let left = x, top = y;
@@ -1545,6 +1555,19 @@ function showMediaCtxMenu(wrap, x, y) {
     else if (act === 'lightbox') { openLightbox(id, (wrap.querySelector('img') ? 'img' : 'video')); }
     else if (act === 'apply-all-big') { canvas.querySelectorAll('.att-wrap[data-att]').forEach(w => w.classList.remove('thumb')); saveCurrentPage(); }
     else if (act === 'apply-all-thumb') { canvas.querySelectorAll('.att-wrap[data-att]').forEach(w => w.classList.add('thumb')); saveCurrentPage(); }
+    else if (act === 'delete') {
+      // 删除图片/视频：同时清理相邻的零宽空格错点 + DOM + 附件元数据 + 本地 blob
+      const next = wrap.nextSibling;
+      if (next && next.nodeType === 3 && next.textContent === '\u200b') next.remove();
+      const prev = wrap.previousSibling;
+      if (prev && prev.nodeType === 3 && prev.textContent === '\u200b') prev.remove();
+      wrap.remove();
+      if (state.attachments && state.attachments[id]) { delete state.attachments[id]; }
+      idbAttDelete(id).catch(()=>{});
+      saveCurrentPage();
+      scheduleSync();
+      setSyncStatus(kindLabel + '已删除·待同步');
+    }
     closeMediaCtxMenu();
   });
 }
@@ -2212,7 +2235,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v12';
+      const C='md-notebook-v13';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
