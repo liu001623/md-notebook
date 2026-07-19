@@ -47,6 +47,10 @@
     --overlay-bg: rgba(0,0,0,.35);
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
+    /* 高亮 色板（亮色版） */
+    --mark-bg: #fff3a8;
+    --hl-1: #fff3a8; --hl-2: #c6f7c6; --hl-3: #bdeaff; --hl-4: #ffd1e0;
+    --hl-5: #e0d4ff; --hl-6: #ffd9b3; --hl-7: #a0ffe0; --hl-8: #ffc9de;
   }
   [data-theme="dark"] {
     --primary: #4a9eff;
@@ -79,6 +83,10 @@
     --danger: #ff6b6b;
     --pi-del-active-bg: #4a2525;
     --overlay-bg: rgba(0,0,0,.55);
+    /* 高亮 色板（暗色版，加深后保留可读性） */
+    --mark-bg: #7d6e0a;
+    --hl-1: #7d6e0a; --hl-2: #2f6b2f; --hl-3: #1f5680; --hl-4: #7a2f49;
+    --hl-5: #4a3a80; --hl-6: #6b4aa0; --hl-7: #1f6b56; --hl-8: #6b2f49;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; margin: 0; padding: 0; overscroll-behavior: none; }
@@ -197,7 +205,13 @@
   #canvas th, #canvas td { border: 1px solid var(--border); padding: 6px 10px; font-size: .95em; }
   #canvas th { background: var(--th-bg); }
   #canvas img { max-width: 100%; border-radius: 6px; }
-  #canvas mark { background: #fff3a8; color: inherit; padding: 0 2px; border-radius: 2px; }
+  #canvas mark { background: var(--mark-bg); color: inherit; padding: 0 2px; border-radius: 2px; }
+  /* 隶属于 .att-wrap 的图片/视频以缩略图形式呈现，点击 lightbox 放大 */
+  .att-wrap .att-img { max-height: 220px; width: auto; max-width: 100%; cursor: zoom-in; object-fit: contain; }
+  .att-wrap .att-video { max-height: 280px; cursor: zoom-in; }
+  /* 暗色模式下高亮内联背景同样加深，避免亮黄肥眼 */
+  [data-theme="dark"] #canvas mark[style*="background"],
+  [data-theme="dark"] #canvas [style*="background-color"] { filter: brightness(.72) saturate(.9); }
   #canvas .math-block {
     display: block; text-align: center; margin: 1em 0;
     padding: 8px; background: var(--math-bg); border-radius: 6px;
@@ -349,6 +363,72 @@
   .att-file .att-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
   .att-file .att-size { font-size: 12px; color: var(--muted); flex-shrink: 0; }
   .att-file .att-dl { font-size: 16px; flex-shrink: 0; opacity: .6; }
+
+  /* ===== 表格操作工具条 ===== */
+  .table-tools {
+    display: inline-flex; gap: 2px; align-items: center;
+    padding: 2px 4px; margin: 0.3em 0;
+    background: var(--toolbar-bg); border: 1px solid var(--border);
+    border-radius: 6px; font-size: 11px; color: var(--muted);
+    user-select: none; flex-wrap: wrap;
+  }
+  .table-tools .tt-label { padding: 0 4px; }
+  .table-tools .tt-btn {
+    min-width: 26px; height: 24px; padding: 0 5px;
+    border: none; background: transparent; border-radius: 4px;
+    cursor: pointer; color: var(--text); font-size: 14px; font-family: inherit;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  }
+  .table-tools .tt-btn:active { background: var(--active); }
+  .table-tools .tt-btn.danger { color: var(--danger); }
+
+  /* ===== 待办项 ===== */
+  .todo-item {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 4px 0; line-height: 1.5;
+  }
+  .todo-item input[type="checkbox"] {
+    width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0;
+    cursor: pointer; accent-color: var(--primary);
+  }
+  .todo-item .todo-text { flex: 1; min-width: 0; word-break: break-word; outline: none; }
+  .todo-item.done .todo-text { color: var(--muted); text-decoration: line-through; }
+
+  /* ===== 图片/视频 全屏 lightbox ===== */
+  .lightbox-overlay {
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(0,0,0,.92);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; box-sizing: border-box;
+    -webkit-user-select: none; user-select: none;
+  }
+  .lightbox-overlay img, .lightbox-overlay video {
+    max-width: 96vw; max-height: 92vh; object-fit: contain; border-radius: 4px;
+    touch-action: pinch-zoom; -webkit-user-drag: none;
+  }
+  .lightbox-close {
+    position: absolute; top: 12px; right: 16px;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(255,255,255,.15); color: #fff; border: none;
+    font-size: 20px; cursor: pointer; z-index: 10000;
+  }
+
+  /* ===== 待办汇总页面 ===== */
+  .todo-summary { padding: 12px 4px; }
+  .todo-summary .ts-header { font-size: 15px; color: var(--muted); margin-bottom: 10px; }
+  .todo-summary .ts-group { margin: 14px 0; }
+  .todo-summary .ts-group-title {
+    font-size: 13px; color: var(--heading); font-weight: 600;
+    padding: 4px 0; cursor: pointer; border-bottom: 1px dashed var(--border);
+  }
+  .todo-summary .ts-group-title:active { color: var(--primary); }
+  .todo-summary .ts-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; border-radius: 6px; font-size: 14px;
+    color: var(--text); cursor: pointer;
+  }
+  .todo-summary .ts-item:active { background: var(--hover); }
+  .todo-summary .ts-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 14px; }
 </style>
 
 <script>
@@ -409,6 +489,7 @@
       <button class="btn" data-action="link">🔗</button>
       <button class="btn" data-action="attach">📎</button>
       <button class="btn" data-action="table">表格</button>
+      <button class="btn" data-action="todo">☑</button>
       <button class="btn" data-cmd="insertHorizontalRule">──</button>
       <button class="btn" data-action="codeBlock">```</button>
     </div>
@@ -429,6 +510,7 @@
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-header">
     <button class="sb-btn primary" id="newPageBtn">+ 新建</button>
+    <button class="sb-btn" id="todoSummaryBtn">📋 待办</button>
     <button class="sb-btn" id="importBtn">📥 导入</button>
   </div>
   <div class="sidebar-search">
@@ -446,15 +528,17 @@
 <div class="overlay" id="moreOverlay"></div>
 <div class="sheet" id="moreSheet">
   <div class="sheet-handle"></div>
-  <div class="sheet-item" id="mNew"><span class="si-icon">📄</span>新建页面</div>
   <div class="sheet-item" id="mImport"><span class="si-icon">📥</span>导入 .md 文件</div>
   <div class="sheet-item" id="mExport"><span class="si-icon">⬇</span>导出当前页为 .md</div>
   <div class="sheet-item" id="mSync"><span class="si-icon">☁</span>云同步设置</div>
-  <div class="sheet-item" id="mPush"><span class="si-icon">⬆</span>立即上传云端</div>
-  <div class="sheet-item" id="mPull"><span class="si-icon">⬇</span>从云端拉取</div>
   <div class="sheet-item" id="mTheme"><span class="si-icon">🌓</span><span class="theme-label">主题：跟随系统</span></div>
-  <div class="sheet-item danger" id="mDelete"><span class="si-icon">🗑</span>删除当前页</div>
   <div class="sheet-cancel" id="mCancel">取消</div>
+</div>
+
+<!-- 图片/视频 全屏 查看容器 -->
+<div class="lightbox-overlay" id="lightbox" style="display:none">
+  <button class="lightbox-close" id="lightboxClose">✕</button>
+  <div id="lightboxBody"></div>
 </div>
 
 <!-- 公式 sheet -->
@@ -620,7 +704,7 @@ async function loadState() {
     state.pages = [{ id, title: '欢迎使用', html: getDefaultHtml(), createdAt: Date.now(), updatedAt: Date.now() }];
     state.currentId = id;
   }
-  if (!state.currentId || !state.pages.find(p => p.id === state.currentId)) {
+  if (!state.currentId || !state.pages.find(p => p.id === state.currentId) || state.currentId === TODO_VIEW_ID) {
     state.currentId = state.pages[0].id;
   }
   await saveState();
@@ -733,6 +817,7 @@ function switchPage(id) {
   state.currentId = id;
   lastViewed[id] = Date.now();
   pageTitle.value = p.title;
+  canvas.setAttribute('contenteditable', 'true');
   canvas.innerHTML = p.html || '';
   renderMathInCanvas();
   renderAttachments();
@@ -741,6 +826,7 @@ function switchPage(id) {
 }
 function saveCurrentPage() {
   if (!state.currentId) return;
+  if (state.currentId === TODO_VIEW_ID) return; // 虚拟视图不保存
   const p = state.pages.find(x => x.id === state.currentId);
   if (!p) return;
   p.html = canvas.innerHTML;
@@ -847,8 +933,23 @@ document.getElementById('toolbar').addEventListener('click', (e) => {
   if (action === 'link') { const u = prompt('链接地址：', 'https://'); if (u) exec('createLink', u); return; }
   if (action === 'attach') return document.getElementById('attachInput').click();
   if (action === 'table') return insertTable();
+  if (action === 'todo') return insertTodoItem();
   if (action === 'codeBlock') return insertCodeBlock();
 });
+
+// 插入一个待办项（checkbox + 文本）
+function insertTodoItem() {
+  const html = '<div class="todo-item" contenteditable="false"><input type="checkbox"><span class="todo-text" contenteditable="true">待办内容</span></div><p><br></p>';
+  insertHtmlAtCursor(html);
+  // 选中默认文本便于直接输入
+  const sel = window.getSelection();
+  const items = canvas.querySelectorAll('.todo-item .todo-text');
+  if (items.length) {
+    const last = items[items.length-1];
+    const r = document.createRange();
+    r.selectNodeContents(last); sel.removeAllRanges(); sel.addRange(r);
+  }
+}
 
 function wrapInlineCode() {
   const sel = window.getSelection(); if (!sel.rangeCount) return;
@@ -859,9 +960,41 @@ function wrapInlineCode() {
   saveCurrentPage();
 }
 function insertTable() {
-  let h = '<table><thead><tr>'; for (let c=0;c<3;c++) h += '<th>标题'+(c+1)+'</th>';
+  const tid = 'tbl_' + Date.now();
+  let h = '<div class="table-block" data-tid="' + tid + '">';
+  h += '<div class="table-tools" contenteditable="false"><span class="tt-label">表格</span>';
+  h += '<button class="tt-btn" data-tt="up" title="上方插行">⬆行</button>';
+  h += '<button class="tt-btn" data-tt="down" title="下方插行">⬇行</button>';
+  h += '<button class="tt-btn" data-tt="left" title="左侧插列">⬅列</button>';
+  h += '<button class="tt-btn" data-tt="right" title="右侧插列">➡列</button>';
+  h += '<button class="tt-btn danger" data-tt="delrow" title="删行">✕行</button>';
+  h += '<button class="tt-btn danger" data-tt="delcol" title="删列">✕列</button>';
+  h += '<button class="tt-btn danger" data-tt="deltable" title="删表">🗑</button>';
+  h += '</div>';
+  h += '<table><thead><tr>'; for (let c=0;c<3;c++) h += '<th>标题'+(c+1)+'</th>';
   h += '</tr></thead><tbody>'; for (let r=0;r<2;r++){ h+='<tr>'; for(let c=0;c<3;c++) h+='<td>&nbsp;</td>'; h+='</tr>'; }
-  h += '</tbody></table><p><br></p>'; insertHtmlAtCursor(h);
+  h += '</tbody></table></div><p><br></p>';
+  insertHtmlAtCursor(h);
+}
+// 表格操作：在光标所在的 cell 上执行指定动作
+function tableAction(action, cell) {
+  const tbl = cell.closest('table');
+  if (!tbl) return;
+  const row = cell.closest('tr');
+  const cellIndex = Array.prototype.indexOf.call(row.children, cell);
+  const rows = tbl.querySelectorAll('tr');
+  const rowIndex = Array.prototype.indexOf.call(rows, row);
+  const isHead = row => row.parentNode && row.parentNode.tagName === 'THEAD';
+  switch(action) {
+    case 'up': { const r = document.createElement('tr'); for (let i=0;i<row.children.length;i++) { const c=document.createElement(isHead(row)?'th':'td'); c.innerHTML='&nbsp;'; r.appendChild(c); } row.parentNode.insertBefore(r, row); break; }
+    case 'down': { const r = document.createElement('tr'); const next = row.nextSibling; for (let i=0;i<row.children.length;i++) { const c=document.createElement('td'); c.innerHTML='&nbsp;'; r.appendChild(c); } if (next) row.parentNode.insertBefore(r, next); else row.parentNode.appendChild(r); break; }
+    case 'left': { rows.forEach(r => { const c = document.createElement(isHead(r)?'th':'td'); c.innerHTML='&nbsp;'; r.insertBefore(c, r.children[cellIndex]); }); break; }
+    case 'right': { rows.forEach(r => { const c = document.createElement(isHead(r)?'th':'td'); c.innerHTML='&nbsp;'; if (r.children[cellIndex+1]) r.insertBefore(c, r.children[cellIndex+1]); else r.appendChild(c); }); break; }
+    case 'delrow': { if (rows.length<=1) return; row.parentNode.removeChild(row); break; }
+    case 'delcol': { if (row.children.length<=1) return; rows.forEach(r => { if (r.children[cellIndex]) r.removeChild(r.children[cellIndex]); }); break; }
+    case 'deltable': { const block = tbl.closest('.table-block'); if (block) { const p = block.nextSibling; block.parentNode.removeChild(block); } return; }
+  }
+  saveCurrentPage();
 }
 function insertCodeBlock() { insertHtmlAtCursor('<pre><code>// 代码\nfunction hello() {\n  console.log("hi");\n}</code></pre><p><br></p>'); }
 function insertHtmlAtCursor(html) {
@@ -996,13 +1129,50 @@ document.getElementById('attachInput').addEventListener('change', (e) => {
   if (e.target.files && e.target.files.length) handleAttachments(e.target.files);
   e.target.value = '';
 });
-// 点击文件附件下载/查看
+// 点击文件附件下载/查看 或 点击表格工具按钮 或 点击图片/视频 lightbox
 canvas.addEventListener('click', (e) => {
+  // 1) 表格工具按钮
+  const ttBtn = e.target.closest('.tt-btn[data-tt]');
+  if (ttBtn) {
+    e.preventDefault(); e.stopPropagation();
+    const block = ttBtn.closest('.table-block');
+    // 取保存的最后选中 cell，或者默认取表格第一个 td
+    const sel = window.getSelection();
+    let cell = null;
+    if (sel && sel.rangeCount && block && block.contains(sel.anchorNode)) {
+      cell = sel.anchorNode.nodeType === 1 ? sel.anchorNode.closest('td,th') : (sel.anchorNode.parentElement && sel.anchorNode.parentElement.closest('td,th'));
+      if (cell && !block.contains(cell)) cell = null;
+    }
+    if (!cell && block) cell = block.querySelector('td') || block.querySelector('th');
+    if (cell) tableAction(ttBtn.dataset.tt, cell);
+    return;
+  }
+  // 2) 文件附件下载
   const attFile = e.target.closest('.att-file[data-att]');
-  if (!attFile) return;
-  e.preventDefault();
-  const id = attFile.getAttribute('data-att');
-  openAttachment(id);
+  if (attFile) {
+    e.preventDefault();
+    const id = attFile.getAttribute('data-att');
+    openAttachment(id);
+    return;
+  }
+  // 3) 图片/视频 → lightbox
+  const media = e.target.closest('.att-wrap[data-att] img.att-img, .att-wrap[data-att] video.att-video');
+  if (media) {
+    e.preventDefault();
+    const wrap = media.closest('.att-wrap[data-att]');
+    const id = wrap.getAttribute('data-att');
+    openLightbox(id, media.tagName.toLowerCase());
+    return;
+  }
+  // 4) 待办项 checkbox 切换
+  const todoCb = e.target.closest('.todo-item input[type=checkbox]');
+  if (todoCb) {
+    const item = todoCb.closest('.todo-item');
+    if (item) item.classList.toggle('done', todoCb.checked);
+    // 同步 checked 到 attribute，否则 innerHTML 不会序列化、保存时会丢失勾选状态
+    if (todoCb.checked) todoCb.setAttribute('checked', 'checked'); else todoCb.removeAttribute('checked');
+    saveCurrentPage();
+  }
 });
 async function openAttachment(id) {
   const meta = state.attachments ? state.attachments[id] : null;
@@ -1013,10 +1183,43 @@ async function openAttachment(id) {
     window.open('https://raw.githubusercontent.com/' + GH.owner + '/' + GH.repo + '/main/' + meta.cloudPath, '_blank');
   }
 }
+// 全屏 lightbox 查看图片/视频
+async function openLightbox(id, tag) {
+  const meta = state.attachments ? state.attachments[id] : null;
+  if (!meta) return;
+  const lightbox = document.getElementById('lightbox');
+  const body = document.getElementById('lightboxBody');
+  let url = await getAttBlobUrl(id);
+  if (!url && meta.cloudPath) url = 'https://raw.githubusercontent.com/' + GH.owner + '/' + GH.repo + '/main/' + meta.cloudPath;
+  if (!url) return;
+  body.innerHTML = '';
+  if (tag === 'video') {
+    const v = document.createElement('video'); v.src = url; v.controls = true; v.playsInline = true; body.appendChild(v);
+  } else {
+    const img = document.createElement('img'); img.src = url; body.appendChild(img);
+  }
+  lightbox.style.display = 'flex';
+}
+function closeLightbox() {
+  const lightbox = document.getElementById('lightbox');
+  const body = document.getElementById('lightboxBody');
+  // 释放视频占用
+  body.querySelectorAll('video').forEach(v => { try { v.pause(); v.src = ''; } catch(e){} });
+  body.innerHTML = '';
+  lightbox.style.display = 'none';
+}
+document.getElementById('lightboxClose').addEventListener('click', closeLightbox);
+document.getElementById('lightbox').addEventListener('click', (e) => { if (e.target.id === 'lightbox' || e.target.id === 'lightboxBody') closeLightbox(); });
 
 /* ========== 色板 ========== */
 const COLORS = ['#e74c3c','#e67e22','#f39c12','#27ae60','#16a085','#2980b9','#8e44ad','#34495e','#c0392b','#d35400','#7f8c8d','#1abc9c','#2c3e50','#e84393','#0984e3','#6c5ce7'];
-const HIGHLIGHTS = ['#fff3a8','#c6f7c6','#bdeaff','#ffd1e0','#e0d4ff','#ffd9b3','#a0ffe0','#ffc9de'];
+// 高亮色集随主题切换
+function currentHIGHLIGHTS() {
+  const root = getComputedStyle(document.documentElement);
+  const arr = [];
+  for (let i=1;i<=8;i++) arr.push(root.getPropertyValue('--hl-'+i).trim() || '#fff3a8');
+  return arr;
+}
 function buildSwatches(container, colors, applyFn) {
   container.innerHTML = '';
   colors.forEach(c => {
@@ -1030,7 +1233,10 @@ function buildSwatches(container, colors, applyFn) {
 }
 const colorWrap = document.getElementById('colorWrap'), hlWrap = document.getElementById('hlWrap');
 buildSwatches(document.getElementById('colorSwatches'), COLORS, (c) => { colorWrap.classList.remove('open'); exec('foreColor', c); });
-buildSwatches(document.getElementById('hlSwatches'), HIGHLIGHTS, (c) => { hlWrap.classList.remove('open'); exec('hiliteColor', c); });
+function rebuildHighlightSwatches() {
+  buildSwatches(document.getElementById('hlSwatches'), currentHIGHLIGHTS(), (c) => { hlWrap.classList.remove('open'); exec('hiliteColor', c); });
+}
+rebuildHighlightSwatches();
 document.getElementById('colorBtn').addEventListener('click', (e) => {
   e.stopPropagation();
   const o = colorWrap.classList.contains('open');
@@ -1128,13 +1334,9 @@ function closeMoreSheet() { moreSheet.classList.remove('show'); moreOverlay.clas
 document.getElementById('moreBtn').addEventListener('click', openMoreSheet);
 moreOverlay.addEventListener('click', closeMoreSheet);
 document.getElementById('mCancel').addEventListener('click', closeMoreSheet);
-document.getElementById('mNew').addEventListener('click', newPage);
 document.getElementById('mImport').addEventListener('click', () => { closeMoreSheet(); document.getElementById('fileInput').click(); });
-document.getElementById('mDelete').addEventListener('click', () => { closeMoreSheet(); if (state.currentId) deletePage(state.currentId); });
 document.getElementById('mSync').addEventListener('click', () => { closeMoreSheet(); setTimeout(() => { try { openSyncSheet(); } catch(e){ alert('openSyncSheet: '+e.message); } }, 250); });
 document.getElementById('mTheme').addEventListener('click', cycleTheme);
-document.getElementById('mPush').addEventListener('click', () => { closeMoreSheet(); setTimeout(() => { try { ghUpload(); } catch(e){ alert('ghUpload: '+e.message); } }, 250); });
-document.getElementById('mPull').addEventListener('click', () => { closeMoreSheet(); setTimeout(() => { try { syncInit(); } catch(e){ alert('syncInit: '+e.message); } }, 250); });
 syncOverlay.addEventListener('click', closeSyncSheet);
 document.getElementById('syncClose').addEventListener('click', closeSyncSheet);
 document.getElementById('syncSave').addEventListener('click', () => {
@@ -1163,6 +1365,83 @@ document.getElementById('mExport').addEventListener('click', () => {
 
 document.getElementById('newPageBtn').addEventListener('click', () => { newPage(); closeSidebar(); });
 document.getElementById('importBtn').addEventListener('click', () => { closeSidebar(); document.getElementById('fileInput').click(); });
+document.getElementById('todoSummaryBtn').addEventListener('click', () => { closeSidebar(); switchToTodoSummary(); });
+
+/* ========== 待办汇总页 ========== */
+const TODO_VIEW_ID = '__todos_summary__';
+// 收集所有页面中未完成的待办项
+function collectTodos() {
+  const out = [];
+  if (!state.pages || !state.pages.length) return out;
+  state.pages.forEach(p => {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = p.html || '';
+    const items = tmp.querySelectorAll('.todo-item');
+    items.forEach((it, idx) => {
+      const cb = it.querySelector('input[type=checkbox]');
+      // 优先用 DOM 实时状态（汇总视图），其次用 attribute（保存的 HTML）
+      const done = cb && (cb.checked || cb.hasAttribute('checked'));
+      const text = (it.querySelector('.todo-text') || {}).textContent || '';
+      out.push({ pageId: p.id, page: p.title || '未命名', idx, text, done: !!done });
+    });
+  });
+  return out;
+}
+function switchToTodoSummary() {
+  saveCurrentPage();
+  state.currentId = TODO_VIEW_ID;
+  pageTitle.value = '📋 待办汇总';
+  canvas.setAttribute('contenteditable', 'false');
+  renderTodoSummary();
+  renderPageList();
+}
+function renderTodoSummary() {
+  const todos = collectTodos();
+  const undone = todos.filter(t => !t.done);
+  const done = todos.filter(t => t.done);
+  let h = '<div class="todo-summary">';
+  h += '<div class="ts-header">未完成 ' + undone.length + ' 项 · 已完成 ' + done.length + ' 项 · 共 ' + todos.length + ' 项</div>';
+  if (!todos.length) {
+    h += '<div class="ts-empty">还没有任何待办项<br>在任意页面点击工具栏的 ☑ 按钮插入待办项</div>';
+    h += '</div>';
+    canvas.innerHTML = h;
+    return;
+  }
+  // 按页面分组列出未完成项
+  const groups = {};
+  undone.forEach(t => { (groups[t.pageId] = groups[t.pageId] || { title: t.page, items: [] }).items.push(t); });
+  Object.keys(groups).forEach(pid => {
+    const g = groups[pid];
+    h += '<div class="ts-group"><div class="ts-group-title" data-pid="' + pid + '">📄 ' + escapeHtml(g.title) + ' · ' + g.items.length + ' 项未完成</div>';
+    g.items.forEach(t => {
+      h += '<div class="ts-item" data-pid="' + pid + '" data-idx="' + t.idx + '"><span>⬜</span><span class="todo-text">' + escapeHtml(t.text || '(空)') + '</span></div>';
+    });
+    h += '</div>';
+  });
+  if (done.length) {
+    h += '<div class="ts-group"><div class="ts-group-title">✅ 已完成 ' + done.length + ' 项</div>';
+    done.forEach(t => {
+      h += '<div class="ts-item" data-pid="' + t.pageId + '" data-idx="' + t.idx + '"><span>✅</span><span class="todo-text" style="color:var(--muted);text-decoration:line-through">' + escapeHtml(t.text || '(空)') + '</span></div>';
+    });
+    h += '</div>';
+  }
+  h += '</div>';
+  canvas.innerHTML = h;
+}
+// 点击待办汇总页中某项 → 跳转回原页面
+canvas.addEventListener('click', (e) => {
+  if (state.currentId !== TODO_VIEW_ID) return;
+  const item = e.target.closest('.ts-item[data-pid]');
+  if (item) {
+    const pid = item.getAttribute('data-pid');
+    switchPage(pid);
+    return;
+  }
+  const title = e.target.closest('.ts-group-title[data-pid]');
+  if (title) {
+    switchPage(title.getAttribute('data-pid'));
+  }
+});
 
 /* ========== GitHub 云同步 ========== */
 const GH = { owner: 'liu001623', repo: 'md-notebook', path: 'data/notebook.json', tokenKey: 'gh_token_v1', shaKey: 'gh_sha_v1' };
@@ -1388,6 +1667,15 @@ function htmlToMd(html) {
             if (child.classList && (child.classList.contains('math-inline') || child.classList.contains('math-block'))) {
               const l = child.getAttribute('data-latex') || '';
               md += child.classList.contains('math-block') ? `$$${l}$$` : `$${l}$`;
+            } else if (child.classList && child.classList.contains('table-block')) {
+              // 表格块：转内部 table，跳过工具条 .table-tools
+              const t = child.querySelector('table');
+              if (t) md += '\n' + tableToMd(t) + '\n\n';
+            } else if (child.classList && child.classList.contains('todo-item')) {
+              const cb = child.querySelector('input[type=checkbox]');
+              const checked = cb && (cb.checked || cb.hasAttribute('checked'));
+              const text = (child.querySelector('.todo-text') || {}).textContent || '';
+              md += '\n- ' + (checked ? '[x]' : '[ ]') + ' ' + text.trim() + '\n';
             } else md += inner;
             break;
           default: md += inner;
@@ -1527,6 +1815,8 @@ function applyTheme() {
   document.documentElement.setAttribute('data-theme', actual);
   const labels = { auto: '跟随系统', light: '浅色', dark: '深色' };
   document.querySelectorAll('.theme-label').forEach(el => { el.textContent = '主题：' + labels[mode]; });
+  // 主题切换后重建高亮色板，使其跟随当前主题
+  if (typeof rebuildHighlightSwatches === 'function') rebuildHighlightSwatches();
 }
 function cycleTheme() {
   const order = ['auto', 'light', 'dark'];
@@ -1557,7 +1847,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v3';
+      const C='md-notebook-v4';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
