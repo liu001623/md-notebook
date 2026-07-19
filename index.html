@@ -1789,7 +1789,14 @@ function moveTblContainerResize(clientY) {
 }
 function endTblContainerResize() {
   if (!tblContainerResize) return;
+  const blk = tblContainerResize.block;
+  const h = blk.style.height;
+  // 保留固定高度但恢复内层 table 的 overflow
+  const inner = tblContainerResize.inner;
   tblContainerResize = null;
+  if (inner) { inner.style.overflowX = ''; inner.style.display = ''; }
+  // 如果高度恰好等于内容高度，去掉固定高度
+  if (h) blk.style.height = h;
   document.body.style.cursor = '';
   document.body.style.userSelect = '';
   saveCurrentPage();
@@ -1818,9 +1825,11 @@ canvas.addEventListener('mousedown', (e) => {
   if (blk) {
     e.preventDefault();
     const r = blk.getBoundingClientRect();
-    tblContainerResize = { block: blk, startY: e.clientY, startHeight: r.height };
+    const inner = blk.querySelector('table');
+    tblContainerResize = { block: blk, inner, startY: e.clientY, startHeight: r.height };
     blk.style.height = r.height + 'px';
     blk.style.overflow = 'auto';
+    if (inner) { inner.style.overflowX = 'visible'; inner.style.display = ''; }
     document.body.style.cursor = 'ns-resize';
     document.body.style.userSelect = 'none';
     return;
@@ -1857,9 +1866,11 @@ canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
     clearTimeout(tableCtxTimer);
     const r = blk.getBoundingClientRect();
-    tblContainerResize = { block: blk, startY: touch.clientY, startHeight: r.height };
+    const inner = blk.querySelector('table');
+    tblContainerResize = { block: blk, inner, startY: touch.clientY, startHeight: r.height };
     blk.style.height = r.height + 'px';
     blk.style.overflow = 'auto';
+    if (inner) { inner.style.overflowX = 'visible'; inner.style.display = ''; }
     return;
   }
   const cell = e.target.closest('td, th');
