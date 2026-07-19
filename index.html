@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MD笔记本">
-<meta name="theme-color" content="#2f80ed">
+<meta name="theme-color" content="#2c3e50">
 <!-- iOS 主屏图标：内嵌 SVG data URI -->
 <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><rect width='180' height='180' fill='%232f80ed' rx='36'/><text x='90' y='120' font-size='100' text-anchor='middle' font-family='PingFang SC,Arial' fill='white' font-weight='bold'>M</text></svg>">
 <!-- manifest 内嵌 data URI，iOS 13+ 支持 -->
@@ -22,6 +22,7 @@
     --sidebar-bg: #f7fbfe;
     --border: #d4e3f0;
     --text: #2c3e50;
+    --topbar-bg: #2c3e50;
     --muted: #7a8a9a;
     --hover: #eaf2fb;
     --active: #d8e9fb;
@@ -60,6 +61,7 @@
     --sidebar-bg: #1a2133;
     --border: #2f3850;
     --text: #e2e8f0;
+    --topbar-bg: #151a26;
     --muted: #8b95a8;
     --hover: #2a3245;
     --active: #324170;
@@ -108,8 +110,8 @@
     display: flex; align-items: center; gap: 8px;
     padding: 8px 10px;
     padding-top: calc(var(--safe-top) + 8px);
-    background: var(--primary);
-    border-bottom: 1px solid var(--primary);
+    background: var(--topbar-bg);
+    border-bottom: 1px solid var(--topbar-bg);
     flex-shrink: 0;
     color: #fff;
   }
@@ -1908,9 +1910,9 @@ function applyTheme() {
   document.documentElement.setAttribute('data-theme', actual);
   const labels = { auto: '跟随系统', light: '浅色', dark: '深色' };
   document.querySelectorAll('.theme-label').forEach(el => { el.textContent = '主题：' + labels[mode]; });
-  // 同步浏览器状态栏主题色：顶栏统一品牌蓝，用 black-translucent 让页面延伸覆盖状态栏
-  // 浅色/暗色模式顶栏都是品牌蓝，状态栏白字可见，与顶栏融为一体
-  const themeColor = '#2f80ed';
+  // 同步浏览器状态栏主题色：顶栏深灰背景，用 black-translucent 让页面延伸覆盖状态栏
+  // 浅色/暗色模式顶栏都是深色，状态栏白字可见，与顶栏融为一体无色差
+  const themeColor = actual === 'dark' ? '#151a26' : '#2c3e50';
   let tcMeta = document.querySelector('meta[name="theme-color"]');
   if (!tcMeta) { tcMeta = document.createElement('meta'); tcMeta.setAttribute('name', 'theme-color'); document.head.appendChild(tcMeta); }
   tcMeta.setAttribute('content', themeColor);
@@ -1949,7 +1951,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v9';
+      const C='md-notebook-v10';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
