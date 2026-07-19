@@ -364,25 +364,23 @@
   .att-file .att-size { font-size: 12px; color: var(--muted); flex-shrink: 0; }
   .att-file .att-dl { font-size: 16px; flex-shrink: 0; opacity: .6; }
 
-  /* ===== 表格操作工具条 ===== */
-  .table-tools {
-    display: inline-flex; gap: 2px; align-items: center;
-    padding: 2px 4px; margin: 0.3em 0;
-    background: var(--toolbar-bg); border: 1px solid var(--border);
-    border-radius: 6px; font-size: 11px; color: var(--muted);
-    user-select: none; flex-wrap: wrap;
+  /* ===== 表格上下文菜单（按需弹出） ===== */
+  .table-ctx-menu {
+    position: absolute; z-index: 9000;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.18);
+    padding: 4px; min-width: 140px;
+    user-select: none;
   }
-  .table-tools .tt-label { padding: 0 4px; }
-  .table-tools .tt-btn {
-    min-width: 26px; height: 24px; padding: 0 5px;
-    border: none; background: transparent; border-radius: 4px;
-    cursor: pointer; color: var(--text); font-size: 14px; font-family: inherit;
-    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  .table-ctx-menu .ctx-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 12px; font-size: 13px; color: var(--text);
+    border-radius: 6px; cursor: pointer; white-space: nowrap;
   }
-  .table-tools .tt-btn:active { background: var(--active); }
-  .table-tools .tt-btn.danger { color: var(--danger); }
-
-  /* ===== 待办项 ===== */
+  .table-ctx-menu .ctx-item:active { background: var(--hover); }
+  .table-ctx-menu .ctx-item.danger { color: var(--danger); }
+  .table-ctx-menu .ctx-sep { height: 1px; background: var(--border); margin: 4px 0; }
+  .table-ctx-menu .ctx-title { padding: 4px 12px; font-size: 11px; color: var(--muted); }
   .todo-item {
     display: flex; align-items: flex-start; gap: 8px;
     padding: 4px 0; line-height: 1.5;
@@ -413,22 +411,15 @@
     font-size: 20px; cursor: pointer; z-index: 10000;
   }
 
-  /* ===== 待办汇总页面 ===== */
-  .todo-summary { padding: 12px 4px; }
-  .todo-summary .ts-header { font-size: 15px; color: var(--muted); margin-bottom: 10px; }
-  .todo-summary .ts-group { margin: 14px 0; }
-  .todo-summary .ts-group-title {
-    font-size: 13px; color: var(--heading); font-weight: 600;
-    padding: 4px 0; cursor: pointer; border-bottom: 1px dashed var(--border);
-  }
-  .todo-summary .ts-group-title:active { color: var(--primary); }
-  .todo-summary .ts-item {
-    display: flex; align-items: center; gap: 8px;
-    padding: 6px 8px; border-radius: 6px; font-size: 14px;
-    color: var(--text); cursor: pointer;
-  }
-  .todo-summary .ts-item:active { background: var(--hover); }
-  .todo-summary .ts-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 14px; }
+  /* ===== 图片/视频上下文菜单 ===== */
+  /* .att-wrap.thumbnails 模式：图片限高 140px，多个并排 */
+  .att-wrap.thumb .att-img { max-height: 140px; width: auto; max-width: 100%; cursor: zoom-in; object-fit: cover; border-radius: 6px; }
+  .att-wrap.thumb .att-video { max-height: 160px; cursor: zoom-in; }
+  /* 默认大图模式（覆盖 .att-wrap .att-img 的 220px 限制） */
+  .att-wrap .att-img { max-height: none; }
+  .att-wrap .att-video { max-height: none; }
+  /* 连续多个 .att-wrap.thumb 显示为横向并排 */
+  .att-wrap.thumb { display: inline-block; margin: 6px 4px; vertical-align: middle; }
 </style>
 
 <script>
@@ -510,7 +501,6 @@
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-header">
     <button class="sb-btn primary" id="newPageBtn">+ 新建</button>
-    <button class="sb-btn" id="todoSummaryBtn">📋 待办</button>
     <button class="sb-btn" id="importBtn">📥 导入</button>
   </div>
   <div class="sidebar-search">
@@ -704,7 +694,7 @@ async function loadState() {
     state.pages = [{ id, title: '欢迎使用', html: getDefaultHtml(), createdAt: Date.now(), updatedAt: Date.now() }];
     state.currentId = id;
   }
-  if (!state.currentId || !state.pages.find(p => p.id === state.currentId) || state.currentId === TODO_VIEW_ID) {
+  if (!state.currentId || !state.pages.find(p => p.id === state.currentId)) {
     state.currentId = state.pages[0].id;
   }
   await saveState();
@@ -826,7 +816,6 @@ function switchPage(id) {
 }
 function saveCurrentPage() {
   if (!state.currentId) return;
-  if (state.currentId === TODO_VIEW_ID) return; // 虚拟视图不保存
   const p = state.pages.find(x => x.id === state.currentId);
   if (!p) return;
   p.html = canvas.innerHTML;
@@ -962,15 +951,6 @@ function wrapInlineCode() {
 function insertTable() {
   const tid = 'tbl_' + Date.now();
   let h = '<div class="table-block" data-tid="' + tid + '">';
-  h += '<div class="table-tools" contenteditable="false"><span class="tt-label">表格</span>';
-  h += '<button class="tt-btn" data-tt="up" title="上方插行">⬆行</button>';
-  h += '<button class="tt-btn" data-tt="down" title="下方插行">⬇行</button>';
-  h += '<button class="tt-btn" data-tt="left" title="左侧插列">⬅列</button>';
-  h += '<button class="tt-btn" data-tt="right" title="右侧插列">➡列</button>';
-  h += '<button class="tt-btn danger" data-tt="delrow" title="删行">✕行</button>';
-  h += '<button class="tt-btn danger" data-tt="delcol" title="删列">✕列</button>';
-  h += '<button class="tt-btn danger" data-tt="deltable" title="删表">🗑</button>';
-  h += '</div>';
   h += '<table><thead><tr>'; for (let c=0;c<3;c++) h += '<th>标题'+(c+1)+'</th>';
   h += '</tr></thead><tbody>'; for (let r=0;r<2;r++){ h+='<tr>'; for(let c=0;c<3;c++) h+='<td>&nbsp;</td>'; h+='</tr>'; }
   h += '</tbody></table></div><p><br></p>';
@@ -1129,25 +1109,9 @@ document.getElementById('attachInput').addEventListener('change', (e) => {
   if (e.target.files && e.target.files.length) handleAttachments(e.target.files);
   e.target.value = '';
 });
-// 点击文件附件下载/查看 或 点击表格工具按钮 或 点击图片/视频 lightbox
+// 点击文件附件下载/查看 或 点击图片/视频 lightbox 或 待办勾选切换
 canvas.addEventListener('click', (e) => {
-  // 1) 表格工具按钮
-  const ttBtn = e.target.closest('.tt-btn[data-tt]');
-  if (ttBtn) {
-    e.preventDefault(); e.stopPropagation();
-    const block = ttBtn.closest('.table-block');
-    // 取保存的最后选中 cell，或者默认取表格第一个 td
-    const sel = window.getSelection();
-    let cell = null;
-    if (sel && sel.rangeCount && block && block.contains(sel.anchorNode)) {
-      cell = sel.anchorNode.nodeType === 1 ? sel.anchorNode.closest('td,th') : (sel.anchorNode.parentElement && sel.anchorNode.parentElement.closest('td,th'));
-      if (cell && !block.contains(cell)) cell = null;
-    }
-    if (!cell && block) cell = block.querySelector('td') || block.querySelector('th');
-    if (cell) tableAction(ttBtn.dataset.tt, cell);
-    return;
-  }
-  // 2) 文件附件下载
+  // 1) 文件附件下载
   const attFile = e.target.closest('.att-file[data-att]');
   if (attFile) {
     e.preventDefault();
@@ -1155,7 +1119,7 @@ canvas.addEventListener('click', (e) => {
     openAttachment(id);
     return;
   }
-  // 3) 图片/视频 → lightbox
+  // 2) 图片/视频 → lightbox（仅在非缩略图切换模式下）
   const media = e.target.closest('.att-wrap[data-att] img.att-img, .att-wrap[data-att] video.att-video');
   if (media) {
     e.preventDefault();
@@ -1164,15 +1128,75 @@ canvas.addEventListener('click', (e) => {
     openLightbox(id, media.tagName.toLowerCase());
     return;
   }
-  // 4) 待办项 checkbox 切换
+  // 3) 待办项 checkbox 切换
   const todoCb = e.target.closest('.todo-item input[type=checkbox]');
   if (todoCb) {
     const item = todoCb.closest('.todo-item');
     if (item) item.classList.toggle('done', todoCb.checked);
-    // 同步 checked 到 attribute，否则 innerHTML 不会序列化、保存时会丢失勾选状态
     if (todoCb.checked) todoCb.setAttribute('checked', 'checked'); else todoCb.removeAttribute('checked');
     saveCurrentPage();
   }
+});
+// 表格上下文菜单：右键 或 手机长按表格 → 弹出操作菜单
+let tableCtxMenu = null, tableCtxTimer = null, tableCtxCell = null;
+function showTableCtxMenu(cell, x, y) {
+  closeTableCtxMenu();
+  tableCtxCell = cell;
+  const menu = document.createElement('div');
+  menu.className = 'table-ctx-menu';
+  menu.innerHTML = '<div class="ctx-title">表格操作</div>'
+    + '<div class="ctx-item" data-tt="up">⬆ 上方插行</div>'
+    + '<div class="ctx-item" data-tt="down">⬇ 下方插行</div>'
+    + '<div class="ctx-item" data-tt="left">⬅ 左侧插列</div>'
+    + '<div class="ctx-item" data-tt="right">➡ 右侧插列</div>'
+    + '<div class="ctx-sep"></div>'
+    + '<div class="ctx-item danger" data-tt="delrow">✕ 删行</div>'
+    + '<div class="ctx-item danger" data-tt="delcol">✕ 删列</div>'
+    + '<div class="ctx-item danger" data-tt="deltable">🗑 删除整表</div>';
+  document.body.appendChild(menu);
+  // 定位：避免出屏
+  const rect = menu.getBoundingClientRect();
+  let left = x, top = y;
+  if (left + rect.width > window.innerWidth - 8) left = window.innerWidth - rect.width - 8;
+  if (top + rect.height > window.innerHeight - 8) top = y - rect.height;
+  menu.style.left = Math.max(8, left) + 'px';
+  menu.style.top = Math.max(8, top) + 'px';
+  tableCtxMenu = menu;
+  menu.addEventListener('click', (ev) => {
+    const it = ev.target.closest('.ctx-item[data-tt]');
+    if (!it) return;
+    ev.stopPropagation();
+    if (tableCtxCell) tableAction(it.dataset.tt, tableCtxCell);
+    closeTableCtxMenu();
+  });
+}
+function closeTableCtxMenu() {
+  if (tableCtxMenu) { tableCtxMenu.parentNode.removeChild(tableCtxMenu); tableCtxMenu = null; }
+  tableCtxCell = null;
+}
+// 右键点表格
+canvas.addEventListener('contextmenu', (e) => {
+  const cell = e.target.closest('.table-block td, .table-block th');
+  if (!cell) return;
+  e.preventDefault();
+  showTableCtxMenu(cell, e.clientX, e.clientY);
+});
+// 手机长按表格
+canvas.addEventListener('touchstart', (e) => {
+  const cell = e.target.closest('.table-block td, .table-block th');
+  if (!cell) return;
+  const touch = e.touches[0];
+  clearTimeout(tableCtxTimer);
+  tableCtxTimer = setTimeout(() => {
+    e.preventDefault();
+    showTableCtxMenu(cell, touch.clientX, touch.clientY);
+  }, 500);
+}, { passive: false });
+canvas.addEventListener('touchend', () => { clearTimeout(tableCtxTimer); });
+canvas.addEventListener('touchmove', () => { clearTimeout(tableCtxTimer); });
+// 点击页面其他位置关闭菜单
+document.addEventListener('click', (e) => {
+  if (tableCtxMenu && !tableCtxMenu.contains(e.target)) closeTableCtxMenu();
 });
 async function openAttachment(id) {
   const meta = state.attachments ? state.attachments[id] : null;
@@ -1210,6 +1234,68 @@ function closeLightbox() {
 }
 document.getElementById('lightboxClose').addEventListener('click', closeLightbox);
 document.getElementById('lightbox').addEventListener('click', (e) => { if (e.target.id === 'lightbox' || e.target.id === 'lightboxBody') closeLightbox(); });
+
+/* ========== 图片/视频 右键/长按 弹出大小切换菜单 ========== */
+let mediaCtxMenu = null, mediaCtxTimer = null;
+function showMediaCtxMenu(wrap, x, y) {
+  closeMediaCtxMenu();
+  const id = wrap.getAttribute('data-att');
+  const meta = state.attachments ? state.attachments[id] : null;
+  const isThumb = wrap.classList.contains('thumb');
+  const menu = document.createElement('div');
+  menu.className = 'table-ctx-menu'; // 复用同一套样式
+  menu.innerHTML = '<div class="ctx-title">图片/视频大小</div>'
+    + (isThumb ? '<div class="ctx-item" data-mt="big">🖼️ 切换为大图</div>' : '<div class="ctx-item" data-mt="thumb">🔲 切换为缩略图（并排）</div>')
+    + '<div class="ctx-item" data-mt="lightbox">🔍 全屏查看</div>'
+    + '<div class="ctx-sep"></div>'
+    + '<div class="ctx-item" data-mt="apply-all-' + (isThumb ? 'big' : 'thumb') + '">应用到本页全部</div>';
+  document.body.appendChild(menu);
+  const rect = menu.getBoundingClientRect();
+  let left = x, top = y;
+  if (left + rect.width > window.innerWidth - 8) left = window.innerWidth - rect.width - 8;
+  if (top + rect.height > window.innerHeight - 8) top = y - rect.height;
+  menu.style.left = Math.max(8, left) + 'px';
+  menu.style.top = Math.max(8, top) + 'px';
+  mediaCtxMenu = menu;
+  menu.addEventListener('click', (ev) => {
+    const it = ev.target.closest('.ctx-item[data-mt]');
+    if (!it) { closeMediaCtxMenu(); return; }
+    ev.stopPropagation();
+    const act = it.dataset.mt;
+    if (act === 'big') { wrap.classList.remove('thumb'); saveCurrentPage(); }
+    else if (act === 'thumb') { wrap.classList.add('thumb'); saveCurrentPage(); }
+    else if (act === 'lightbox') { openLightbox(id, (wrap.querySelector('img') ? 'img' : 'video')); }
+    else if (act === 'apply-all-big') { canvas.querySelectorAll('.att-wrap[data-att]').forEach(w => w.classList.remove('thumb')); saveCurrentPage(); }
+    else if (act === 'apply-all-thumb') { canvas.querySelectorAll('.att-wrap[data-att]').forEach(w => w.classList.add('thumb')); saveCurrentPage(); }
+    closeMediaCtxMenu();
+  });
+}
+function closeMediaCtxMenu() {
+  if (mediaCtxMenu) { mediaCtxMenu.parentNode.removeChild(mediaCtxMenu); mediaCtxMenu = null; }
+}
+// 右键点图片/视频
+canvas.addEventListener('contextmenu', (e) => {
+  const wrap = e.target.closest('.att-wrap[data-att]');
+  if (!wrap) return;
+  e.preventDefault();
+  showMediaCtxMenu(wrap, e.clientX, e.clientY);
+});
+// 手机长按图片/视频
+canvas.addEventListener('touchstart', (e) => {
+  const wrap = e.target.closest('.att-wrap[data-att]');
+  if (!wrap) return;
+  const touch = e.touches[0];
+  clearTimeout(mediaCtxTimer);
+  mediaCtxTimer = setTimeout(() => {
+    e.preventDefault();
+    showMediaCtxMenu(wrap, touch.clientX, touch.clientY);
+  }, 500);
+}, { passive: false });
+canvas.addEventListener('touchend', () => { clearTimeout(mediaCtxTimer); }, { passive: true });
+canvas.addEventListener('touchmove', () => { clearTimeout(mediaCtxTimer); }, { passive: true });
+document.addEventListener('click', (e) => {
+  if (mediaCtxMenu && !mediaCtxMenu.contains(e.target)) closeMediaCtxMenu();
+});
 
 /* ========== 色板 ========== */
 const COLORS = ['#e74c3c','#e67e22','#f39c12','#27ae60','#16a085','#2980b9','#8e44ad','#34495e','#c0392b','#d35400','#7f8c8d','#1abc9c','#2c3e50','#e84393','#0984e3','#6c5ce7'];
@@ -1365,83 +1451,6 @@ document.getElementById('mExport').addEventListener('click', () => {
 
 document.getElementById('newPageBtn').addEventListener('click', () => { newPage(); closeSidebar(); });
 document.getElementById('importBtn').addEventListener('click', () => { closeSidebar(); document.getElementById('fileInput').click(); });
-document.getElementById('todoSummaryBtn').addEventListener('click', () => { closeSidebar(); switchToTodoSummary(); });
-
-/* ========== 待办汇总页 ========== */
-const TODO_VIEW_ID = '__todos_summary__';
-// 收集所有页面中未完成的待办项
-function collectTodos() {
-  const out = [];
-  if (!state.pages || !state.pages.length) return out;
-  state.pages.forEach(p => {
-    const tmp = document.createElement('div');
-    tmp.innerHTML = p.html || '';
-    const items = tmp.querySelectorAll('.todo-item');
-    items.forEach((it, idx) => {
-      const cb = it.querySelector('input[type=checkbox]');
-      // 优先用 DOM 实时状态（汇总视图），其次用 attribute（保存的 HTML）
-      const done = cb && (cb.checked || cb.hasAttribute('checked'));
-      const text = (it.querySelector('.todo-text') || {}).textContent || '';
-      out.push({ pageId: p.id, page: p.title || '未命名', idx, text, done: !!done });
-    });
-  });
-  return out;
-}
-function switchToTodoSummary() {
-  saveCurrentPage();
-  state.currentId = TODO_VIEW_ID;
-  pageTitle.value = '📋 待办汇总';
-  canvas.setAttribute('contenteditable', 'false');
-  renderTodoSummary();
-  renderPageList();
-}
-function renderTodoSummary() {
-  const todos = collectTodos();
-  const undone = todos.filter(t => !t.done);
-  const done = todos.filter(t => t.done);
-  let h = '<div class="todo-summary">';
-  h += '<div class="ts-header">未完成 ' + undone.length + ' 项 · 已完成 ' + done.length + ' 项 · 共 ' + todos.length + ' 项</div>';
-  if (!todos.length) {
-    h += '<div class="ts-empty">还没有任何待办项<br>在任意页面点击工具栏的 ☑ 按钮插入待办项</div>';
-    h += '</div>';
-    canvas.innerHTML = h;
-    return;
-  }
-  // 按页面分组列出未完成项
-  const groups = {};
-  undone.forEach(t => { (groups[t.pageId] = groups[t.pageId] || { title: t.page, items: [] }).items.push(t); });
-  Object.keys(groups).forEach(pid => {
-    const g = groups[pid];
-    h += '<div class="ts-group"><div class="ts-group-title" data-pid="' + pid + '">📄 ' + escapeHtml(g.title) + ' · ' + g.items.length + ' 项未完成</div>';
-    g.items.forEach(t => {
-      h += '<div class="ts-item" data-pid="' + pid + '" data-idx="' + t.idx + '"><span>⬜</span><span class="todo-text">' + escapeHtml(t.text || '(空)') + '</span></div>';
-    });
-    h += '</div>';
-  });
-  if (done.length) {
-    h += '<div class="ts-group"><div class="ts-group-title">✅ 已完成 ' + done.length + ' 项</div>';
-    done.forEach(t => {
-      h += '<div class="ts-item" data-pid="' + t.pageId + '" data-idx="' + t.idx + '"><span>✅</span><span class="todo-text" style="color:var(--muted);text-decoration:line-through">' + escapeHtml(t.text || '(空)') + '</span></div>';
-    });
-    h += '</div>';
-  }
-  h += '</div>';
-  canvas.innerHTML = h;
-}
-// 点击待办汇总页中某项 → 跳转回原页面
-canvas.addEventListener('click', (e) => {
-  if (state.currentId !== TODO_VIEW_ID) return;
-  const item = e.target.closest('.ts-item[data-pid]');
-  if (item) {
-    const pid = item.getAttribute('data-pid');
-    switchPage(pid);
-    return;
-  }
-  const title = e.target.closest('.ts-group-title[data-pid]');
-  if (title) {
-    switchPage(title.getAttribute('data-pid'));
-  }
-});
 
 /* ========== GitHub 云同步 ========== */
 const GH = { owner: 'liu001623', repo: 'md-notebook', path: 'data/notebook.json', tokenKey: 'gh_token_v1', shaKey: 'gh_sha_v1' };
@@ -1790,6 +1799,45 @@ canvas.addEventListener('keydown', (e) => {
     else if (k === 's') { e.preventDefault(); document.getElementById('mExport').click(); }
   }
   if (e.key === 'Tab') { e.preventDefault(); document.execCommand('insertText', false, '  '); }
+  // 在待办项 span 内按 Enter → 插入新待办项
+  if (e.key === 'Enter') {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    let node = sel.anchorNode;
+    if (node && node.nodeType === 3) node = node.parentElement;
+    const todoText = node && node.closest ? node.closest('.todo-text') : null;
+    if (todoText) {
+      e.preventDefault();
+      const item = todoText.closest('.todo-item');
+      if (!item) return;
+      // 如果当前项内容为空，则将其转为普通空行（允许跳出列表）
+      if (!todoText.textContent.trim()) {
+        const br = document.createElement('p'); br.innerHTML = '<br>';
+        item.parentNode.insertBefore(br, item.nextSibling);
+        // 先退出原 item，再移除空项
+        item.parentNode.removeChild(item);
+        const r = document.createRange();
+        r.setStart(br, 0); r.collapse(true);
+        sel.removeAllRanges(); sel.addRange(r);
+        saveCurrentPage();
+        return;
+      }
+      // 创建新待办项
+      const newItem = document.createElement('div');
+      newItem.className = 'todo-item';
+      newItem.setAttribute('contenteditable', 'false');
+      newItem.innerHTML = '<input type="checkbox"><span class="todo-text" contenteditable="true">待办内容</span>';
+      // 在原 item 后面插入，再插一个 <p> 分隔防止连续 Enter 时跳不出
+      item.parentNode.insertBefore(newItem, item.nextSibling);
+      // 清空新项默认文本、选中它
+      const newText = newItem.querySelector('.todo-text');
+      newText.textContent = '';
+      const r = document.createRange();
+      r.setStart(newText, 0); r.collapse(true);
+      sel.removeAllRanges(); sel.addRange(r);
+      saveCurrentPage();
+    }
+  }
 });
 
 function escapeAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -1847,7 +1895,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v4';
+      const C='md-notebook-v5';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
