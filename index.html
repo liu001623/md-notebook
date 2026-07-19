@@ -184,14 +184,18 @@
   /* ===== 画布 ===== */
   .canvas-wrap {
     flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
-    padding: 16px 12px;
+    padding: 16px 8px;
   }
   #canvas {
-    max-width: 760px; margin: 0 auto; background: var(--canvas-bg);
-    padding: 24px 20px; min-height: calc(100% - 0px);
+    max-width: 1100px; margin: 0 auto; background: var(--canvas-bg);
+    padding: 24px 16px; min-height: calc(100% - 0px);
     border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.05);
     outline: none; font-size: 16px; line-height: 1.75;
     word-wrap: break-word; overflow-wrap: break-word;
+  }
+  /* 手机/窄屏：编辑区全宽，左右留白更紧凑 */
+  @media (max-width: 759px) {
+    #canvas { max-width: 100%; padding: 18px 12px; }
   }
   #canvas:empty::before {
     content: attr(data-placeholder); color: var(--muted); font-style: italic; pointer-events: none;
@@ -220,8 +224,8 @@
   #canvas pre code { background: transparent; color: inherit; padding: 0; white-space: pre; }
   #canvas a { color: var(--primary); word-break: break-all; }
   #canvas hr { border: none; border-top: 1px dashed var(--border); margin: 1.4em 0; }
-  #canvas table { border-collapse: collapse; margin: 1em 0; max-width: 100%; display: block; overflow-x: auto; word-break: break-word; }
-  #canvas th, #canvas td { border: 1px solid var(--border); padding: 6px 10px; font-size: .95em; word-break: break-word; overflow-wrap: anywhere; box-sizing: border-box; }
+  #canvas table { border-collapse: collapse; margin: .6em 0; max-width: 100%; width: 100%; display: block; overflow-x: auto; word-break: break-word; }
+  #canvas th, #canvas td { border: 1px solid var(--border); padding: 4px 8px; font-size: .94em; word-break: break-word; overflow-wrap: anywhere; box-sizing: border-box; }
   #canvas th { background: var(--th-bg); }
   #canvas img { max-width: 100%; border-radius: 6px; }
   #canvas mark { background: var(--mark-bg); color: inherit; padding: 0 2px; border-radius: 2px; }
@@ -293,7 +297,7 @@
   .sidebar-title { padding: 12px 12px 6px; font-size: 11px; color: var(--muted); letter-spacing: 1px; }
   .sidebar-list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 8px 8px; list-style: none; margin: 0; }
   .page-item {
-    padding: 12px 10px; margin-bottom: 4px; border-radius: 8px;
+    padding: 8px 10px; margin-bottom: 2px; border-radius: 8px;
     cursor: pointer; font-size: 14px;
     display: flex; align-items: center; gap: 8px;
     border: 1px solid transparent;
@@ -531,44 +535,48 @@
   </div>
 
   <div class="toolbar" id="toolbar">
+    <!-- 第一组：标题段落 -->
     <div class="tg">
       <button class="btn" data-cmd="formatBlock" data-val="H1">H1</button>
       <button class="btn" data-cmd="formatBlock" data-val="H2">H2</button>
       <button class="btn" data-cmd="formatBlock" data-val="H3">H3</button>
       <button class="btn" data-cmd="formatBlock" data-val="P">正文</button>
     </div>
+    <!-- 第二组：常用 -->
     <div class="tg">
-      <button class="btn" data-cmd="bold"><b>B</b></button>
-      <button class="btn" data-cmd="italic"><i>I</i></button>
-      <button class="btn" data-cmd="strikeThrough"><s>S</s></button>
-      <button class="btn" data-cmd="code">&lt;/&gt;</button>
-    </div>
-    <div class="tg">
-      <button class="btn" data-cmd="insertUnorderedList">• 列表</button>
-      <button class="btn" data-cmd="insertOrderedList">1. 列表</button>
-      <button class="btn" data-cmd="formatBlock" data-val="BLOCKQUOTE">引用</button>
-      <button class="btn" data-action="codeBlock">```</button>
-    </div>
-    <div class="tg">
+      <button class="btn" data-cmd="bold" title="加粗 (Ctrl+B)"><b>B</b></button>
+      <button class="btn" data-action="todo" title="插入待办项">☑</button>
       <span class="color-wrap" id="colorWrap">
-        <button class="btn" id="colorBtn">⬤色</button>
+        <button class="btn" id="colorBtn" title="文字颜色">⬤色</button>
         <div class="swatches" id="colorSwatches"></div>
       </span>
       <span class="color-wrap" id="hlWrap">
-        <button class="btn" id="hlBtn">🖍亮</button>
+        <button class="btn" id="hlBtn" title="荧光高亮">🖍亮</button>
         <div class="swatches" id="hlSwatches"></div>
       </span>
+      <button class="btn" data-action="table" title="插入表格">表格</button>
+      <button class="btn" data-action="attach" title="添加附件">📎</button>
+      <button class="btn" data-cmd="insertHorizontalRule" title="分割线">──</button>
     </div>
+    <!-- 第三组：编辑辅助 -->
     <div class="tg">
-      <button class="btn" data-action="mathInline">$x$</button>
-      <button class="btn" data-action="mathBlock">$$块$$</button>
+      <button class="btn" data-cmd="strikeThrough" title="删除线"><s>S</s></button>
+      <button class="btn" data-action="undo" title="撤销 (Ctrl+Z)">↶</button>
+      <button class="btn" data-action="redo" title="重做 (Ctrl+Shift+Z / Ctrl+Y)">↷</button>
+      <button class="btn" data-cmd="italic" title="倾斜 (Ctrl+I)"><i>I</i></button>
+      <button class="btn" data-action="clearFormat" title="清除格式">A✕</button>
+      <button class="btn" data-cmd="underline" title="下划线"><u>U</u></button>
+      <button class="btn" data-cmd="formatBlock" data-val="BLOCKQUOTE" title="引用">引用</button>
+      <button class="btn" data-cmd="code" title="内联代码">&lt;/&gt;</button>
     </div>
+    <!-- 第四组：其他 -->
     <div class="tg">
-      <button class="btn" data-action="link">🔗</button>
-      <button class="btn" data-action="attach">📎</button>
-      <button class="btn" data-action="table">表格</button>
-      <button class="btn" data-action="todo">☑</button>
-      <button class="btn" data-cmd="insertHorizontalRule">──</button>
+      <button class="btn" data-cmd="insertUnorderedList" title="无序列表">• 列表</button>
+      <button class="btn" data-cmd="insertOrderedList" title="有序列表">1. 列表</button>
+      <button class="btn" data-action="mathInline" title="行内公式">$x$</button>
+      <button class="btn" data-action="mathBlock" title="块级公式">$$块$$</button>
+      <button class="btn" data-action="link" title="插入链接">🔗</button>
+      <button class="btn" data-action="codeBlock" title="代码块">```</button>
     </div>
   </div>
 
@@ -1034,6 +1042,8 @@ function switchPage(id) {
   pageTitle.value = p.title;
   canvas.setAttribute('contenteditable', 'true');
   canvas.innerHTML = p.html || '';
+  // 切页后重置 undo/redo 栈：基线 = 新页面内容
+  undoStack = []; redoStack = []; lastSnapshot = canvas.innerHTML;
   renderMathInCanvas();
   renderAttachments();
   renderPageList();
@@ -1043,6 +1053,7 @@ function saveCurrentPage() {
   if (!state.currentId) return;
   const p = state.pages.find(x => x.id === state.currentId);
   if (!p) return;
+  snapshotCanvas(); // DOM 变化前先把上一个状态推入 undo 栈（覆盖工具栏/按钮 DOM 操作）
   p.html = canvas.innerHTML;
   p.title = pageTitle.value || '未命名';
   p.updatedAt = Date.now();
@@ -1208,6 +1219,49 @@ function renderMathInCanvas() {
   } else { setTimeout(renderMathInCanvas, 400); }
 }
 
+/* ========== 自定义撤销/重做（兼容 DOM 操作：删除整表、删图、加粗等均可 Ctrl+Z 恢复） ========== */
+const UNDO_LIMIT = 80;
+let undoStack = [];
+let redoStack = [];
+let lastSnapshot = '';
+let undoing = false;
+// 在 canvas.innerHTML 变化前调用：把上一个状态推入 undoStack，清空 redoStack
+function snapshotCanvas() {
+  if (undoing) return;
+  const h = canvas.innerHTML;
+  if (h === lastSnapshot) return;
+  undoStack.push(lastSnapshot);
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  lastSnapshot = h;
+  redoStack = [];
+}
+function undoCanvas() {
+  if (!undoStack.length) { statRight.textContent = '无可撤销'; return; }
+  undoing = true;
+  const prev = undoStack.pop();
+  redoStack.push(canvas.innerHTML);
+  canvas.innerHTML = prev;
+  lastSnapshot = prev;
+  renderMathInCanvas();
+  renderAttachments();
+  undoing = false;
+  saveCurrentPage();
+  statRight.textContent = '已撤销';
+}
+function redoCanvas() {
+  if (!redoStack.length) { statRight.textContent = '无可重做'; return; }
+  undoing = true;
+  const next = redoStack.pop();
+  undoStack.push(canvas.innerHTML);
+  canvas.innerHTML = next;
+  lastSnapshot = next;
+  renderMathInCanvas();
+  renderAttachments();
+  undoing = false;
+  saveCurrentPage();
+  statRight.textContent = '已重做';
+}
+
 /* ========== 工具栏 ========== */
 document.execCommand('styleWithCSS', false, true);
 function exec(cmd, val) { canvas.focus(); document.execCommand(cmd, false, val); saveCurrentPage(); }
@@ -1231,7 +1285,29 @@ document.getElementById('toolbar').addEventListener('click', (e) => {
   if (action === 'table') return insertTable();
   if (action === 'todo') return insertTodoItem();
   if (action === 'codeBlock') return insertCodeBlock();
+  if (action === 'undo') return undoCanvas();
+  if (action === 'redo') return redoCanvas();
+  if (action === 'clearFormat') return clearFormat();
 });
+
+// 清除格式：拆除选中文字上的全部格式标签（粗/斜/下划/删除线/代码/高亮/颜色/字号）
+function clearFormat() {
+  canvas.focus();
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  if (range.collapsed) { statRight.textContent = '请先选中文字'; return; }
+  const frag = range.extractContents();
+  // 拆除所有格式标签，仅保留文字与父级块结构
+  frag.querySelectorAll('strong,b,em,i,s,del,u,code,mark,span[style],font[color],span').forEach(el => {
+    while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
+    el.remove();
+  });
+  range.insertNode(frag);
+  canvas.normalize();
+  saveCurrentPage();
+  statRight.textContent = '已清除格式';
+}
 
 // 插入一个待办项（checkbox + 文本）
 function insertTodoItem() {
@@ -1309,6 +1385,16 @@ function tableAction(action, cell) {
     case 'valigntop': case 'valignmiddle': case 'valignbottom': {
       const v = action === 'valigntop' ? 'top' : (action === 'valignmiddle' ? 'middle' : 'bottom');
       getSelectedCells(cell).forEach(c => c.style.verticalAlign = v);
+      break;
+    }
+    case 'w50': tbl.style.width = '50%'; break;
+    case 'w75': tbl.style.width = '75%'; break;
+    case 'w100': tbl.style.width = '100%'; break;
+    case 'resetcells': {
+      // 清除所有单元格的内联宽高，清除 table-layout 与 width，让表格回归默认尺寸
+      tbl.style.tableLayout = '';
+      tbl.style.width = '';
+      tbl.querySelectorAll('td, th').forEach(c => { c.style.width = ''; c.style.height = ''; });
       break;
     }
   }
@@ -1516,6 +1602,8 @@ let tableCtxMenu = null, tableCtxTimer = null, tableCtxCell = null;
 function showTableCtxMenu(cell, x, y) {
   closeTableCtxMenu();
   tableCtxCell = cell;
+  const tbl = cell.closest('table');
+  const tblW = tbl ? (tbl.style.width || '') : '';
   const ta = (cell.style.textAlign || '').toLowerCase();
   const va = (cell.style.verticalAlign || '').toLowerCase();
   const menu = document.createElement('div');
@@ -1541,7 +1629,16 @@ function showTableCtxMenu(cell, x, y) {
     + '<div class="ctx-sep"></div>'
     + '<div class="ctx-item danger" data-tt="delrow">✕ 删行</div>'
     + '<div class="ctx-item danger" data-tt="delcol">✕ 删列</div>'
-    + '<div class="ctx-item danger" data-tt="deltable">🗑 删除整表</div>';
+    + '<div class="ctx-item danger" data-tt="deltable">🗑 删除整表</div>'
+    + '<div class="ctx-sep"></div>'
+    + '<div class="ctx-subtitle">表格整体宽度</div>'
+    + '<div class="ctx-grid">'
+    + `<div class="ctx-item${(tblW==='50%')?' active':''}" data-tt="w50">50%</div>`
+    + `<div class="ctx-item${(tblW==='75%')?' active':''}" data-tt="w75">75%</div>`
+    + `<div class="ctx-item${(!tblW||tblW==='100%')?' active':''}" data-tt="w100">100%</div>`
+    + '</div>'
+    + '<div class="ctx-sep"></div>'
+    + '<div class="ctx-item" data-tt="resetcells">↺ 重置行高/列宽</div>';
   document.body.appendChild(menu);
   // 定位：避免出屏
   const rect = menu.getBoundingClientRect();
@@ -1576,8 +1673,9 @@ let rowResize = null; // { startY, startHeights, cells }
 // 检测鼠标/手指是否在单元格边缘上：右边沿→列宽，下边沿→行高
 function cellEdgeMode(cell, clientX, clientY) {
   const r = cell.getBoundingClientRect();
-  const onRight = clientX >= r.right - 6 && clientX <= r.right + 4;
-  const onBottom = clientY >= r.bottom - 6 && clientY <= r.bottom + 4;
+  // 容差由 6px 扩到 8px，便于上下拖拉缩小行高
+  const onRight = clientX >= r.right - 8 && clientX <= r.right + 5;
+  const onBottom = clientY >= r.bottom - 8 && clientY <= r.bottom + 5;
   // 右下角 5x5 区域优先列宽（避免冲突）
   if (onRight) return 'right';
   if (onBottom) return 'bottom';
@@ -2488,6 +2586,8 @@ canvas.addEventListener('keydown', (e) => {
     if (k === 'b') { e.preventDefault(); exec('bold'); }
     else if (k === 'i') { e.preventDefault(); exec('italic'); }
     else if (k === 's') { e.preventDefault(); document.getElementById('mExport').click(); }
+    else if (k === 'z' && !e.shiftKey) { e.preventDefault(); undoCanvas(); }
+    else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redoCanvas(); }
   }
   if (e.key === 'Tab') { e.preventDefault(); document.execCommand('insertText', false, '  '); }
   // 在待办项 span 内按 Enter → 插入新待办项
@@ -2595,7 +2695,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v17';
+      const C='md-notebook-v18';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
