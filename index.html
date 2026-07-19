@@ -2983,7 +2983,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v24';
+      const C='md-notebook-v25';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
