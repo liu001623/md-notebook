@@ -1145,6 +1145,8 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
     state.pages.push({ id, title, html, createdAt: Date.now(), updatedAt: Date.now() });
     state.currentId = id;
     pageTitle.value = title; canvas.innerHTML = html;
+    wrapBareTables(); // 包装 markdown 解析出的裸表格
+    state.pages[state.pages.length-1].html = canvas.innerHTML; // 把包装后的 HTML 回写
     renderMathInCanvas(); renderPageList(); saveState();
     statRight.textContent = '已导入: ' + file.name;
   };
@@ -1228,6 +1230,20 @@ function insertTable() {
   h += '</tbody></table></div><p><br></p>';
   insertHtmlAtCursor(h);
 }
+// 把 canvas 内不在 .table-block 内的裸 <table> 自动包一层 .table-block
+// 幂等：粘贴/导入的表格经此包装后即可享有右键菜单/列宽拖拉/对齐/导出 markdown 等全部能力
+function wrapBareTables() {
+  canvas.querySelectorAll('table').forEach(t => {
+    if (t.closest('.table-block')) return; // 已有包装
+    const parent = t.parentElement;
+    if (!parent) return;
+    const div = document.createElement('div');
+    div.className = 'table-block';
+    div.setAttribute('data-tid', 'tbl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6));
+    parent.insertBefore(div, t);
+    div.appendChild(t);
+  });
+}
 // 表格操作：在光标所在的 cell 上执行指定动作
 function tableAction(action, cell) {
   const tbl = cell.closest('table');
@@ -1244,7 +1260,14 @@ function tableAction(action, cell) {
     case 'right': { rows.forEach(r => { const c = document.createElement(isHead(r)?'th':'td'); c.innerHTML='&nbsp;'; if (r.children[cellIndex+1]) r.insertBefore(c, r.children[cellIndex+1]); else r.appendChild(c); }); break; }
     case 'delrow': { if (rows.length<=1) return; row.parentNode.removeChild(row); break; }
     case 'delcol': { if (row.children.length<=1) return; rows.forEach(r => { if (r.children[cellIndex]) r.removeChild(r.children[cellIndex]); }); break; }
-    case 'deltable': { const block = tbl.closest('.table-block'); if (block) { const p = block.nextSibling; block.parentNode.removeChild(block); } return; }
+    case 'deltable': {
+      const block = tbl.closest('.table-block') || tbl;
+      // 清理紧邻的空占位段 <p><br></p>，避免遗留空行
+      const next = block.nextSibling;
+      if (next && next.tagName === 'P' && next.innerHTML.replace(/<br\s*\/?>|\s|&nbsp;/g, '') === '') next.remove();
+      block.remove();
+      break;
+    }
     case 'alignleft': case 'aligncenter': case 'alignright': {
       const v = action === 'alignleft' ? 'left' : (action === 'aligncenter' ? 'center' : 'right');
       getSelectedCells(cell).forEach(c => c.style.textAlign = v);
@@ -1410,6 +1433,8 @@ async function renderAttachments() {
     const next = br.nextElementSibling;
     if (next && next.classList && next.classList.contains('att-wrap')) br.remove();
   });
+  // 粘贴/导入的裸表格自动包装 .table-block，使其具备菜单/列宽/对齐/导出能力
+  wrapBareTables();
 }
 document.getElementById('attachInput').addEventListener('change', (e) => {
   if (e.target.files && e.target.files.length) handleAttachments(e.target.files);
@@ -1507,7 +1532,7 @@ function closeTableCtxMenu() {
 }
 // 右键点表格
 canvas.addEventListener('contextmenu', (e) => {
-  const cell = e.target.closest('.table-block td, .table-block th');
+  const cell = e.target.closest('td, th');
   if (!cell) return;
   e.preventDefault();
   showTableCtxMenu(cell, e.clientX, e.clientY);
@@ -1554,12 +1579,12 @@ function endColResize() {
 // 鼠标：在表格单元格上检测右边沿 → 列宽光标；按下 → 拖拉
 canvas.addEventListener('mousemove', (e) => {
   if (colResize) { moveColResize(e.clientX); return; }
-  const cell = e.target.closest('.table-block td, .table-block th');
+  const cell = e.target.closest('td, th');
   if (!cell) return;
   cell.style.cursor = cellEdgeMode(cell, e.clientX) ? 'col-resize' : '';
 });
 canvas.addEventListener('mousedown', (e) => {
-  const cell = e.target.closest('.table-block td, .table-block th');
+  const cell = e.target.closest('td, th');
   if (!cell) return;
   if (cellEdgeMode(cell, e.clientX)) {
     e.preventDefault();
@@ -1573,7 +1598,7 @@ document.addEventListener('mousemove', (e) => { if (colResize) moveColResize(e.c
 document.addEventListener('mouseup', endColResize);
 // 手机长按表格 → 菜单；但触摸单元格右边沿时优先列宽拖拉
 canvas.addEventListener('touchstart', (e) => {
-  const cell = e.target.closest('.table-block td, .table-block th');
+  const cell = e.target.closest('td, th');
   if (!cell) return;
   const touch = e.touches[0];
   // 边缘 → 列宽拖拉（阻止长按菜单）
@@ -2230,6 +2255,7 @@ canvas.addEventListener('paste', (e) => {
   if (plainText && isMarkdownLike(plainText)) {
     e.preventDefault();
     insertHtmlAtCursor(mdToCleanHtml(plainText));
+    wrapBareTables();
     saveCurrentPage();
     setSyncStatus('已识别 Markdown 粘贴');
     setTimeout(renderMathInCanvas, 50);
@@ -2238,6 +2264,7 @@ canvas.addEventListener('paste', (e) => {
   if (htmlText && htmlText.trim()) {
     e.preventDefault();
     insertHtmlAtCursor(wrapMathInHtml(cleanHtmlForPaste(htmlText)));
+    wrapBareTables();
     saveCurrentPage();
     setSyncStatus('已适配 AI 富文本粘贴');
     setTimeout(renderMathInCanvas, 50);
@@ -2358,7 +2385,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v14';
+      const C='md-notebook-v15';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
