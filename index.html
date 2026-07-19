@@ -1380,12 +1380,6 @@ function wrapBareTables() {
     if (blk.getAttribute('contenteditable') !== 'false') blk.setAttribute('contenteditable', 'false');
     const tbl = blk.querySelector('table');
     if (tbl && tbl.getAttribute('contenteditable') !== 'true') tbl.setAttribute('contenteditable', 'true');
-    // 恢复已有的固定高度设置（页面保存时 data-th 记录了用户设定的高度）
-    const th = blk.getAttribute('data-th');
-    if (th) {
-      blk.style.height = th + 'px';
-      blk.style.overflow = 'auto';
-    }
   });
 }
 // 表格操作：在光标所在的 cell 上执行指定动作
@@ -1775,86 +1769,16 @@ function endRowResize() {
   document.body.style.userSelect = '';
   saveCurrentPage();
 }
-/* ========== 表格底部把手调整容器可视高度 ========== */
-let tableResize = null; // { block, startY, startHeight }
-/* ========== 表格底部边缘拖动调整容器可视高度 ========== */
-let tableResize = null; // { block, startY, startHeight }
-// 判断鼠标是否在某个 .table-block 的底部边缘 14px 区域内（纯坐标计算，不依赖把手 DOM）
-function getTableAtBottom(e) {
-  const blocks = canvas.querySelectorAll('.table-block');
-  for (const blk of blocks) {
-    const r = blk.getBoundingClientRect();
-    if (e.clientX >= r.left && e.clientX <= r.right &&
-        e.clientY >= r.bottom - 14 && e.clientY <= r.bottom + 6) {
-      return blk;
-    }
-  }
-  return null;
-}
-function startTableHeightDrag(block, clientY) {
-  let h = parseInt(block.getAttribute('data-th')) || block.offsetHeight;
-  if (h < 60) h = 60;
-  tableResize = { block, startY: clientY, startHeight: h };
-  block.style.height = h + 'px';
-  block.style.overflow = 'hidden';
-  return true;
-}
-function moveTableHeightDrag(clientY) {
-  if (!tableResize) return;
-  const dy = clientY - tableResize.startY;
-  let newH = tableResize.startHeight + dy;
-  if (newH < 60) newH = 60;
-  tableResize.block.style.height = newH + 'px';
-  tableResize.block.setAttribute('data-th', newH);
-}
-function endTableHeightDrag() {
-  if (!tableResize) return;
-  const block = tableResize.block;
-  const tbl = block.querySelector('table');
-  if (tbl) {
-    const contentH = tbl.scrollHeight;
-    const curH = parseInt(block.getAttribute('data-th')) || 0;
-    if (curH >= contentH + 10) {
-      block.style.height = '';
-      block.style.overflow = '';
-      block.removeAttribute('data-th');
-    } else {
-      block.style.overflow = 'auto';
-    }
-  }
-  tableResize = null;
-  document.body.style.cursor = '';
-  document.body.style.userSelect = '';
-  saveCurrentPage();
-}
 // 鼠标：在表格单元格上检测边缘 → 对应光标；按下 → 拖拉
 canvas.addEventListener('mousemove', (e) => {
   if (colResize) { moveColResize(e.clientX); return; }
   if (rowResize) { moveRowResize(e.clientY); return; }
-  if (tableResize) { moveTableHeightDrag(e.clientY); return; }
-  // 检查是否悬停在表格底部边缘（容器高度调节区域）
-  const blk = getTableAtBottom(e);
-  if (blk) {
-    document.body.style.cursor = 'row-resize';
-    return;
-  }
-  document.body.style.cursor = '';
   const cell = e.target.closest('td, th');
   if (!cell) return;
   const edge = cellEdgeMode(cell, e.clientX, e.clientY);
   cell.style.cursor = edge === 'right' ? 'col-resize' : (edge === 'bottom' ? 'row-resize' : '');
 });
 canvas.addEventListener('mousedown', (e) => {
-  // 优先检查表格底部边缘 → 启动容器高度拖动
-  const blk = getTableAtBottom(e);
-  if (blk) {
-    e.preventDefault();
-    if (startTableHeightDrag(blk, e.clientY)) {
-      document.body.style.cursor = 'row-resize';
-      document.body.style.userSelect = 'none';
-    }
-    return;
-  }
   const cell = e.target.closest('td, th');
   if (!cell) return;
   const edge = cellEdgeMode(cell, e.clientX, e.clientY);
@@ -1875,22 +1799,13 @@ canvas.addEventListener('mousedown', (e) => {
 document.addEventListener('mousemove', (e) => {
   if (colResize) moveColResize(e.clientX);
   else if (rowResize) moveRowResize(e.clientY);
-  else if (tableResize) moveTableHeightDrag(e.clientY);
 });
-document.addEventListener('mouseup', () => { if (colResize) endColResize(); else if (rowResize) endRowResize(); else if (tableResize) endTableHeightDrag(); });
-// 手机触摸：长按表格 → 菜单；触摸边缘 → 列宽/行高拖拉；触摸底部边缘 → 容器高度调节
+document.addEventListener('mouseup', () => { if (colResize) endColResize(); else if (rowResize) endRowResize(); });
+// 手机触摸：长按表格 → 菜单；触摸单元格边缘时优先列宽/行高拖拉
 canvas.addEventListener('touchstart', (e) => {
-  const touch = e.touches[0];
-  // 优先检查表格底部边缘
-  const blk = getTableAtBottom(touch);
-  if (blk) {
-    e.preventDefault();
-    clearTimeout(tableCtxTimer);
-    startTableHeightDrag(blk, touch.clientY);
-    return;
-  }
   const cell = e.target.closest('td, th');
   if (!cell) return;
+  const touch = e.touches[0];
   const edge = cellEdgeMode(cell, touch.clientX, touch.clientY);
   if (edge === 'right') {
     e.preventDefault();
@@ -1921,17 +1836,11 @@ canvas.addEventListener('touchmove', (e) => {
     moveRowResize(e.touches[0].clientY);
     return;
   }
-  if (tableResize) {
-    e.preventDefault();
-    moveTableHeightDrag(e.touches[0].clientY);
-    return;
-  }
   clearTimeout(tableCtxTimer);
 }, { passive: false });
 canvas.addEventListener('touchend', () => {
   if (colResize) { endColResize(); return; }
   if (rowResize) { endRowResize(); return; }
-  if (tableResize) { endTableHeightDrag(); return; }
   clearTimeout(tableCtxTimer);
 });
 // 点击页面其他位置关闭菜单
