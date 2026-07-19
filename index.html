@@ -611,6 +611,7 @@
     <select id="sortSelect">
       <option value="recent">最近访问</option>
       <option value="title">按标题</option>
+      <option value="created">按创建时间</option>
       <option value="updated">按修改时间</option>
     </select>
   </div>
@@ -1033,6 +1034,7 @@ function sortedAndFilteredPages() {
   arr.sort((a, b) => {
     if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
     if (sortBy === 'title') return (a.title||'').localeCompare(b.title||'', 'zh-CN');
+    if (sortBy === 'created') return (b.createdAt||0) - (a.createdAt||0);
     if (sortBy === 'updated') return (b.updatedAt||0) - (a.updatedAt||0);
     return (lastViewed[b.id]||0) - (lastViewed[a.id]||0);
   });
@@ -2969,7 +2971,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v26';
+      const C='md-notebook-v27';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
