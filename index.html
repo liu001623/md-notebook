@@ -330,6 +330,24 @@
   .math-actions button.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
 
   input[type="file"] { display: none; }
+
+  /* ===== 附件样式 ===== */
+  .att-wrap { display: block; margin: 0.8em 0; text-align: center; }
+  .att-img { max-width: 100%; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.1); }
+  .att-video { max-width: 100%; border-radius: 8px; background: var(--pre-bg); }
+  .att-audio { width: 100%; max-width: 400px; }
+  .att-file {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; margin: 0.6em 0;
+    background: var(--quote-bg); border: 1px solid var(--border);
+    border-radius: 10px; cursor: pointer; text-decoration: none; color: var(--text);
+    transition: background .15s;
+  }
+  .att-file:active { background: var(--hover); }
+  .att-file .att-icon { font-size: 22px; flex-shrink: 0; }
+  .att-file .att-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+  .att-file .att-size { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+  .att-file .att-dl { font-size: 16px; flex-shrink: 0; opacity: .6; }
 </style>
 
 <script>
@@ -388,6 +406,7 @@
     </div>
     <div class="tg">
       <button class="btn" data-action="link">🔗</button>
+      <button class="btn" data-action="attach">📎</button>
       <button class="btn" data-action="table">表格</button>
       <button class="btn" data-cmd="insertHorizontalRule">──</button>
       <button class="btn" data-action="codeBlock">```</button>
@@ -451,6 +470,7 @@
 </div>
 
 <input type="file" id="fileInput" accept=".md,.txt,.markdown">
+<input type="file" id="attachInput" multiple>
 
 <!-- 云同步设置 sheet -->
 <div class="overlay" id="syncOverlay"></div>
@@ -473,22 +493,128 @@
 </div>
 
 <script>
-/* ========== 数据 ========== */
-const STORAGE_KEY = 'md-notebook-mobile-v1';
-let state = { pages: [], currentId: null, deletedIds: {} };
+/* ========== 数据（本地优先 / IndexedDB） ========== */
+const DB_NAME = 'md-notebook-db';
+const DB_VERSION = 1;
+const LEGACY_LSK = 'md-notebook-mobile-v1';
+const ATT_MAX_SIZE = 50 * 1024 * 1024;
+const ATT_CACHE_LIMIT = 500 * 1024 * 1024;
+let state = { pages: [], currentId: null, deletedIds: {}, attachments: {} };
 let saveTimer = null;
+let _db = null;
 
-function loadState() {
+function getDB() {
+  if (_db) return Promise.resolve(_db);
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('kv')) d.createObjectStore('kv', { keyPath: 'key' });
+      if (!d.objectStoreNames.contains('attachments')) d.createObjectStore('attachments', { keyPath: 'id' });
+    };
+    req.onsuccess = () => { _db = req.result; resolve(_db); };
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbGet(key) {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('kv', 'readonly');
+    const r = tx.objectStore('kv').get(key);
+    r.onsuccess = () => resolve(r.result ? r.result.value : null);
+    r.onerror = () => reject(r.error);
+  });
+}
+async function idbSet(key, value) {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('kv', 'readwrite');
+    tx.objectStore('kv').put({ key, value });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbAttPut(att) {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('attachments', 'readwrite');
+    tx.objectStore('attachments').put(att);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbAttGet(id) {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('attachments', 'readonly');
+    const r = tx.objectStore('attachments').get(id);
+    r.onsuccess = () => resolve(r.result || null);
+    r.onerror = () => reject(r.error);
+  });
+}
+async function idbAttGetAll() {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('attachments', 'readonly');
+    const r = tx.objectStore('attachments').getAll();
+    r.onsuccess = () => resolve(r.result || []);
+    r.onerror = () => reject(r.error);
+  });
+}
+async function idbAttDelete(id) {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('attachments', 'readwrite');
+    tx.objectStore('attachments').delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+const _blobUrls = {};
+async function getAttBlobUrl(id) {
+  if (_blobUrls[id]) return _blobUrls[id];
+  const att = await idbAttGet(id);
+  if (!att || !att.blob) return null;
+  const url = URL.createObjectURL(att.blob);
+  _blobUrls[id] = url;
+  att.accessedAt = Date.now();
+  idbAttPut(att).catch(()=>{});
+  return url;
+}
+// LRU 清理：超过 500MB 时清理最久未访问、已上传云端的附件
+async function attLRUCleanup() {
   try {
-    const s = localStorage.getItem(STORAGE_KEY);
-    if (s) state = JSON.parse(s);
-  } catch (e) {}
+    const all = await idbAttGetAll();
+    let total = all.reduce((s, a) => s + (a.size || 0), 0);
+    if (total <= ATT_CACHE_LIMIT) return;
+    all.sort((a, b) => (a.accessedAt||0) - (b.accessedAt||0));
+    for (const a of all) {
+      if (total <= ATT_CACHE_LIMIT * 0.9) break;
+      const meta = state.attachments[a.id];
+      if (meta && meta.cloudUploaded) {
+        await idbAttDelete(a.id);
+        total -= (a.size || 0);
+        if (_blobUrls[a.id]) { URL.revokeObjectURL(_blobUrls[a.id]); delete _blobUrls[a.id]; }
+      }
+    }
+  } catch(e) {}
+}
+
+async function loadState() {
+  const saved = await idbGet('state');
+  if (saved) {
+    state = saved;
+  } else {
+    try {
+      const s = localStorage.getItem(LEGACY_LSK);
+      if (s) { state = JSON.parse(s); await idbSet('state', state); }
+    } catch (e) {}
+  }
   if (!state.pages || !Array.isArray(state.pages)) state.pages = [];
   if (!state.deletedIds || typeof state.deletedIds !== 'object') state.deletedIds = {};
-  // 过滤掉墓碑中的页面（防数据不一致）
+  if (!state.attachments || typeof state.attachments !== 'object') state.attachments = {};
   state.pages = state.pages.filter(p => !state.deletedIds[p.id]);
   if (!state.pages.length) {
-    // 使用固定 id，避免多端各自创建导致「欢迎使用」重复
     const id = 'welcome-default';
     state.pages = [{ id, title: '欢迎使用', html: getDefaultHtml(), createdAt: Date.now(), updatedAt: Date.now() }];
     state.currentId = id;
@@ -496,9 +622,10 @@ function loadState() {
   if (!state.currentId || !state.pages.find(p => p.id === state.currentId)) {
     state.currentId = state.pages[0].id;
   }
+  await saveState();
 }
-function saveState() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {} }
-function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveState, 500); }
+async function saveState() { try { await idbSet('state', state); } catch (e) {} }
+function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(() => saveState(), 500); }
 
 function getDefaultHtml() {
   return `<h1>Markdown 笔记本</h1>
@@ -607,6 +734,7 @@ function switchPage(id) {
   pageTitle.value = p.title;
   canvas.innerHTML = p.html || '';
   renderMathInCanvas();
+  renderAttachments();
   renderPageList();
   saveState();
 }
@@ -717,6 +845,7 @@ document.getElementById('toolbar').addEventListener('click', (e) => {
   if (action === 'mathInline') return openMathSheet(false);
   if (action === 'mathBlock') return openMathSheet(true);
   if (action === 'link') { const u = prompt('链接地址：', 'https://'); if (u) exec('createLink', u); return; }
+  if (action === 'attach') return document.getElementById('attachInput').click();
   if (action === 'table') return insertTable();
   if (action === 'codeBlock') return insertCodeBlock();
 });
@@ -745,6 +874,123 @@ function insertHtmlAtCursor(html) {
     if (last) { range.setStartAfter(last); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); }
   } else { canvas.insertAdjacentHTML('beforeend', html); }
   saveCurrentPage();
+}
+
+/* ========== 附件上传与渲染 ========== */
+function fileIcon(type) {
+  if (type.startsWith('image/')) return '🖼️';
+  if (type.startsWith('video/')) return '🎬';
+  if (type.startsWith('audio/')) return '🎵';
+  if (type.includes('pdf')) return '📄';
+  if (type.includes('word') || type.includes('document')) return '📝';
+  if (type.includes('sheet') || type.includes('excel')) return '📊';
+  if (type.includes('presentation') || type.includes('powerpoint')) return '📽️';
+  if (type.includes('zip') || type.includes('compressed')) return '🗜️';
+  return '📎';
+}
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/1048576).toFixed(1) + ' MB';
+}
+function arrayBufferToBase64(buf) {
+  let binary = '';
+  const bytes = new Uint8Array(buf);
+  const chunk = 8192;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+function base64ToBytes(b64) {
+  const binary = atob(b64.replace(/\n/g, ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+async function handleAttachments(files) {
+  for (const file of files) {
+    if (file.size > ATT_MAX_SIZE) {
+      alert(`文件「${file.name}」超过 50MB 限制（当前 ${formatSize(file.size)}）`);
+      continue;
+    }
+    const id = 'att_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const meta = {
+      id, filename: file.name,
+      type: file.type || 'application/octet-stream',
+      size: file.size, createdAt: Date.now(),
+      cloudUploaded: false, cloudPath: ''
+    };
+    await idbAttPut({ id, ...meta, blob: file, accessedAt: Date.now() });
+    if (!state.attachments) state.attachments = {};
+    state.attachments[id] = meta;
+    await saveState();
+    insertAttachmentHtml(id, meta);
+    scheduleSync();
+    attLRUCleanup();
+    setSyncStatus('附件已添加·待同步');
+  }
+}
+function insertAttachmentHtml(id, meta) {
+  const mt = meta.type || '';
+  let html = '';
+  if (mt.startsWith('image/')) {
+    html = `<div class="att-wrap" data-att="${id}" contenteditable="false"><img class="att-img" alt="${escapeAttr(meta.filename)}"></div><p><br></p>`;
+  } else if (mt.startsWith('video/')) {
+    html = `<div class="att-wrap" data-att="${id}" contenteditable="false"><video class="att-video" controls playsinline></video></div><p><br></p>`;
+  } else if (mt.startsWith('audio/')) {
+    html = `<div class="att-wrap" data-att="${id}" contenteditable="false"><audio class="att-audio" controls></audio></div><p><br></p>`;
+  } else {
+    const icon = fileIcon(mt);
+    html = `<div class="att-file" data-att="${id}" contenteditable="false"><span class="att-icon">${icon}</span><span class="att-name">${escapeHtml(meta.filename)}</span><span class="att-size">${formatSize(meta.size)}</span><span class="att-dl">📥</span></div><p><br></p>`;
+  }
+  insertHtmlAtCursor(html);
+  getAttBlobUrl(id).then(url => {
+    if (!url) return;
+    const el = canvas.querySelector(`[data-att="${id}"]`);
+    if (!el) return;
+    const media = el.querySelector('img, video, audio');
+    if (media) media.src = url;
+  });
+  saveCurrentPage();
+}
+async function renderAttachments() {
+  const els = canvas.querySelectorAll('[data-att]');
+  for (const el of els) {
+    const id = el.getAttribute('data-att');
+    const url = await getAttBlobUrl(id);
+    const media = el.querySelector('img, video, audio');
+    if (media) {
+      if (url) media.src = url;
+      else {
+        const meta = state.attachments ? state.attachments[id] : null;
+        if (meta && meta.cloudPath) {
+          media.src = 'https://raw.githubusercontent.com/' + GH.owner + '/' + GH.repo + '/main/' + meta.cloudPath;
+        }
+      }
+    }
+  }
+}
+document.getElementById('attachInput').addEventListener('change', (e) => {
+  if (e.target.files && e.target.files.length) handleAttachments(e.target.files);
+  e.target.value = '';
+});
+// 点击文件附件下载/查看
+canvas.addEventListener('click', (e) => {
+  const attFile = e.target.closest('.att-file[data-att]');
+  if (!attFile) return;
+  e.preventDefault();
+  const id = attFile.getAttribute('data-att');
+  openAttachment(id);
+});
+async function openAttachment(id) {
+  const meta = state.attachments ? state.attachments[id] : null;
+  if (!meta) return;
+  const url = await getAttBlobUrl(id);
+  if (url) { window.open(url, '_blank'); return; }
+  if (meta.cloudPath) {
+    window.open('https://raw.githubusercontent.com/' + GH.owner + '/' + GH.repo + '/main/' + meta.cloudPath, '_blank');
+  }
 }
 
 /* ========== 色板 ========== */
@@ -936,8 +1182,59 @@ async function ghUpload() {
     const j = await r.json();
     localStorage.setItem(GH.shaKey, j.content.sha);
     setSyncStatus('已同步 ' + new Date().toLocaleTimeString());
+    // 同步完笔记后，上传未同步的附件
+    setTimeout(syncAttachments, 500);
   } catch(e) { setSyncStatus('上传失败:' + (e.message||'').slice(0,20)); }
   finally { isSyncing = false; }
+}
+// 上传单个附件到 GitHub files/ 目录
+async function ghUploadAttachment(attId) {
+  const meta = state.attachments[attId];
+  if (!meta || meta.cloudUploaded) return;
+  const att = await idbAttGet(attId);
+  if (!att || !att.blob) return;
+  try {
+    const cloudPath = `files/${attId}/${encodeURIComponent(meta.filename)}`;
+    const ab = await att.blob.arrayBuffer();
+    const b64 = arrayBufferToBase64(ab);
+    const body = { message: 'upload attachment ' + attId, content: b64 };
+    const r = await ghApi('contents/' + cloudPath, { method: 'PUT', body: JSON.stringify(body) });
+    if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message || ('HTTP ' + r.status)); }
+    meta.cloudUploaded = true;
+    meta.cloudPath = cloudPath;
+    await saveState();
+  } catch(e) { setSyncStatus('附件上传失败: ' + (e.message||'').slice(0,30)); }
+}
+// 从云端下载附件到本地缓存
+async function ghDownloadAttachment(attId, meta) {
+  if (!meta || !meta.cloudPath) return;
+  const local = await idbAttGet(attId);
+  if (local) return;
+  try {
+    const r = await ghApi('contents/' + meta.cloudPath);
+    if (!r.ok) return;
+    const j = await r.json();
+    const bytes = base64ToBytes(j.content);
+    const blob = new Blob([bytes], { type: meta.type });
+    await idbAttPut({ id: attId, ...meta, blob, accessedAt: Date.now() });
+  } catch(e) {}
+}
+// 同步所有附件：上传未同步的 + 下载本地缺失的
+async function syncAttachments() {
+  if (!ghToken()) return;
+  if (state.attachments) {
+    for (const id of Object.keys(state.attachments)) {
+      if (!state.attachments[id].cloudUploaded) await ghUploadAttachment(id);
+    }
+    for (const id of Object.keys(state.attachments)) {
+      const m = state.attachments[id];
+      if (m.cloudUploaded && m.cloudPath) {
+        const local = await idbAttGet(id);
+        if (!local) await ghDownloadAttachment(id, m);
+      }
+    }
+  }
+  renderAttachments();
 }
 function scheduleSync() {
   if (!ghToken() || isSyncing) return;
@@ -992,13 +1289,29 @@ async function syncInit() {
   });
   state.pages = mergedPages;
   state.deletedIds = mergedDeleted;
+  // 合并附件元数据：取两端并集，相同 id 取较新值
+  if (!state.attachments) state.attachments = {};
+  if (cloud.attachments) {
+    for (const id of Object.keys(cloud.attachments)) {
+      if (mergedDeleted[id]) continue;
+      const cloudAtt = cloud.attachments[id];
+      const localAtt = state.attachments[id];
+      if (!localAtt) {
+        state.attachments[id] = cloudAtt;
+      } else if ((cloudAtt.createdAt||0) > (localAtt.createdAt||0)) {
+        state.attachments[id] = cloudAtt;
+      }
+    }
+  }
   if (!state.currentId || !state.pages.find(p=>p.id===state.currentId)) state.currentId = state.pages[0] ? state.pages[0].id : null;
   saveState(); renderPageList();
   const cur = state.pages.find(p => p.id === state.currentId);
-  if (cur) { pageTitle.value = cur.title; canvas.innerHTML = cur.html || ''; renderMathInCanvas(); }
+  if (cur) { pageTitle.value = cur.title; canvas.innerHTML = cur.html || ''; renderMathInCanvas(); renderAttachments(); }
   setSyncStatus('已同步 ' + new Date().toLocaleTimeString());
   // 若有变化，上传合并结果让多端一致
   if (changed > 0) setTimeout(ghUpload, 500);
+  // 后台下载本地缺失的附件
+  setTimeout(syncAttachments, 1000);
 }
 // syncSheet/syncOverlay 已在更多菜单段提前声明
 function openSyncSheet() {
@@ -1208,21 +1521,29 @@ if (window.matchMedia) {
   });
 }
 
-/* ========== 初始化 ========== */
+/* ========== 初始化（本地优先：先从 IndexedDB 秒开，再后台同步） ========== */
 applyTheme();
-loadState();
-renderPageList();
-const cur = state.pages.find(p => p.id === state.currentId);
-if (cur) { pageTitle.value = cur.title; canvas.innerHTML = cur.html || ''; renderMathInCanvas(); }
-syncInit();
+loadState().then(() => {
+  renderPageList();
+  const cur = state.pages.find(p => p.id === state.currentId);
+  if (cur) { pageTitle.value = cur.title; canvas.innerHTML = cur.html || ''; renderMathInCanvas(); renderAttachments(); }
+  // 后台同步云端（不阻塞界面）
+  if (ghToken()) syncInit();
+  attLRUCleanup();
+});
 
 // PWA：注册 service worker（若部署到 https 站点时生效；file:// 下静默失败）
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v1';
+      const C='md-notebook-v2';
       self.addEventListener('install', e => self.skipWaiting());
-      self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+      self.addEventListener('activate', e => e.waitUntil((async () => {
+        // 清理旧版本缓存
+        const keys = await caches.keys();
+        await Promise.all(keys.filter(k => k !== C).map(k => caches.delete(k)));
+        await self.clients.claim();
+      })()));
       self.addEventListener('fetch', e => {
         e.respondWith(
           fetch(e.request).then(res => {
