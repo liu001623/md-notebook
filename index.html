@@ -235,7 +235,21 @@
   }
   #canvas th { background: var(--th-bg); }
   /* 表格块包装层：自身无额外间距，交给内部 table 控制 */
-  #canvas .table-block { margin: .4em 0; }
+  #canvas .table-block { margin: .4em 0; position: relative; }
+  /* 表格右下角缩放把手：鼠标拖动可等比例放大/缩小整表（含字号、行高、宽度） */
+  #canvas .table-block::after {
+    content: ''; position: absolute; right: -3px; bottom: -3px;
+    width: 14px; height: 14px;
+    background: linear-gradient(135deg, transparent 50%, var(--primary) 50%, var(--primary) 60%, transparent 60%, transparent 75%, var(--primary) 75%, var(--primary) 85%, transparent 85%);
+    cursor: nwse-resize; opacity: .55;
+    border-radius: 2px; pointer-events: auto; z-index: 5;
+  }
+  #canvas .table-block:hover::after { opacity: 1; }
+  /* 缩放时把 table、th、td 的字号都用 em 单位，跟随 .table-block 的 font-size */
+  #canvas .table-block { font-size: 16px; }
+  #canvas .table-block table,
+  #canvas .table-block th,
+  #canvas .table-block td { font-size: inherit; }
   #canvas img { max-width: 100%; border-radius: 6px; }
   #canvas mark { background: var(--mark-bg); color: inherit; padding: 0 2px; border-radius: 2px; }
   /* 隶属于 .att-wrap 的图片/视频以缩略图形式呈现，点击 lightbox 放大 */
@@ -1769,16 +1783,96 @@ function endRowResize() {
   document.body.style.userSelect = '';
   saveCurrentPage();
 }
+/* ========== 表格右下角把手等比例缩放整表 ========== */
+let tableScale = null; // { block, startX, startY, startScale, startFontSize, tableWidth, anchorLeft, anchorTop }
+// 判断鼠标是否在 .table-block 的右下角缩放把手区域内
+function isOnTableScaleHandle(e, block) {
+  if (!block) return false;
+  const r = block.getBoundingClientRect();
+  // 右下角 18×18 区域为缩放把手（把 ::after 的 14px 扩大一点容差，便于点中）
+  return e.clientX >= r.right - 18 && e.clientX <= r.right + 4 &&
+         e.clientY >= r.bottom - 18 && e.clientY <= r.bottom + 4;
+}
+function startTableScale(block, clientX, clientY) {
+  const tbl = block.querySelector('table');
+  if (!tbl) return false;
+  // 获取或初始化当前缩放比例（默认 1）
+  let scale = parseFloat(block.getAttribute('data-scale') || '1');
+  if (!scale || isNaN(scale)) scale = 1;
+  // 记录初始表格字号、表格宽度、鼠标起始位置、缩放钝点（以表格左上角为钝点）
+  const tblRect = tbl.getBoundingClientRect();
+  const blkRect = block.getBoundingClientRect();
+  tableScale = {
+    block,
+    startX: clientX,
+    startY: clientY,
+    startScale: scale,
+    startFontSize: parseFloat(getComputedStyle(tbl).fontSize) || 16,
+    startTableWidth: tblRect.width,
+    // 以表格左上角为钝点（鼠标到钝点的距离变化作为缩放依据）
+    anchorLeft: tblRect.left,
+    anchorTop: tblRect.top
+  };
+  return true;
+}
+function moveTableScale(clientX, clientY) {
+  if (!tableScale) return;
+  const ts = tableScale;
+  // 计算鼠标到钝点的当前距离与初始距离的比值
+  const dxStart = ts.startX - ts.anchorLeft;
+  const dyStart = ts.startY - ts.anchorTop;
+  const distStart = Math.sqrt(dxStart * dxStart + dyStart * dyStart);
+  const dxNow = clientX - ts.anchorLeft;
+  const dyNow = clientY - ts.anchorTop;
+  const distNow = Math.sqrt(dxNow * dxNow + dyNow * dyNow);
+  if (distStart <= 0) return;
+  let ratio = distNow / distStart;
+  let newScale = ts.startScale * ratio;
+  // 限制缩放范围：0.4x ~ 3x，避免极限值表格不可用
+  if (newScale < 0.4) newScale = 0.4;
+  if (newScale > 3) newScale = 3;
+  // 应用：表格整体 font-size 跟随缩放，表格宽度按新比例与初始宽度的比值调整
+  ts.block.style.fontSize = (ts.startFontSize * newScale) + 'px';
+  ts.block.setAttribute('data-scale', newScale.toFixed(3));
+  // 表格宽度同步按缩放比例调整（以初始宽度为墓准）
+  const tbl = ts.block.querySelector('table');
+  if (tbl) tbl.style.width = (ts.startTableWidth * newScale / ts.startScale) + 'px';
+}
+function endTableScale() {
+  if (!tableScale) return;
+  tableScale = null;
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  saveCurrentPage();
+}
 // 鼠标：在表格单元格上检测边缘 → 对应光标；按下 → 拖拉
 canvas.addEventListener('mousemove', (e) => {
   if (colResize) { moveColResize(e.clientX); return; }
   if (rowResize) { moveRowResize(e.clientY); return; }
+  if (tableScale) { moveTableScale(e.clientX, e.clientY); return; }
+  // 优先检查是否悬停在表格缩放把手上
+  const scaleBlock = e.target.closest ? e.target.closest('.table-block') : null;
+  if (scaleBlock && isOnTableScaleHandle(e, scaleBlock)) {
+    document.body.style.cursor = 'nwse-resize';
+    return;
+  }
+  document.body.style.cursor = '';
   const cell = e.target.closest('td, th');
   if (!cell) return;
   const edge = cellEdgeMode(cell, e.clientX, e.clientY);
   cell.style.cursor = edge === 'right' ? 'col-resize' : (edge === 'bottom' ? 'row-resize' : '');
 });
 canvas.addEventListener('mousedown', (e) => {
+  // 优先检查表格缩放把手：点中右下角把手 → 启动整表缩放
+  const scaleBlock = e.target.closest ? e.target.closest('.table-block') : null;
+  if (scaleBlock && isOnTableScaleHandle(e, scaleBlock)) {
+    e.preventDefault();
+    if (startTableScale(scaleBlock, e.clientX, e.clientY)) {
+      document.body.style.cursor = 'nwse-resize';
+      document.body.style.userSelect = 'none';
+    }
+    return;
+  }
   const cell = e.target.closest('td, th');
   if (!cell) return;
   const edge = cellEdgeMode(cell, e.clientX, e.clientY);
@@ -1799,13 +1893,22 @@ canvas.addEventListener('mousedown', (e) => {
 document.addEventListener('mousemove', (e) => {
   if (colResize) moveColResize(e.clientX);
   else if (rowResize) moveRowResize(e.clientY);
+  else if (tableScale) moveTableScale(e.clientX, e.clientY);
 });
-document.addEventListener('mouseup', () => { if (colResize) endColResize(); else if (rowResize) endRowResize(); });
-// 手机长按表格 → 菜单；但触摸单元格边缘时优先列宽/行高拖拉
+document.addEventListener('mouseup', () => { if (colResize) endColResize(); else if (rowResize) endRowResize(); else if (tableScale) endTableScale(); });
+// 手机长按表格 → 菜单；但触摸单元格边缘时优先列宽/行高拖拉；点中右下角把手 → 整表缩放
 canvas.addEventListener('touchstart', (e) => {
+  const touch = e.touches[0];
+  // 优先检查表格缩放把手
+  const scaleBlock = e.target.closest ? e.target.closest('.table-block') : null;
+  if (scaleBlock && isOnTableScaleHandle(touch, scaleBlock)) {
+    e.preventDefault();
+    clearTimeout(tableCtxTimer);
+    startTableScale(scaleBlock, touch.clientX, touch.clientY);
+    return;
+  }
   const cell = e.target.closest('td, th');
   if (!cell) return;
-  const touch = e.touches[0];
   const edge = cellEdgeMode(cell, touch.clientX, touch.clientY);
   if (edge === 'right') {
     e.preventDefault();
@@ -1836,11 +1939,17 @@ canvas.addEventListener('touchmove', (e) => {
     moveRowResize(e.touches[0].clientY);
     return;
   }
+  if (tableScale) {
+    e.preventDefault();
+    moveTableScale(e.touches[0].clientX, e.touches[0].clientY);
+    return;
+  }
   clearTimeout(tableCtxTimer);
 }, { passive: false });
 canvas.addEventListener('touchend', () => {
   if (colResize) { endColResize(); return; }
   if (rowResize) { endRowResize(); return; }
+  if (tableScale) { endTableScale(); return; }
   clearTimeout(tableCtxTimer);
 });
 // 点击页面其他位置关闭菜单
@@ -2892,7 +3001,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v23';
+      const C='md-notebook-v24';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
