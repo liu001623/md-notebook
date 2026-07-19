@@ -1344,8 +1344,8 @@ function wrapInlineCode() {
 }
 function insertTable() {
   const tid = 'tbl_' + Date.now();
-  let h = '<div class="table-block" data-tid="' + tid + '">';
-  h += '<table><thead><tr>'; for (let c=0;c<3;c++) h += '<th>标题'+(c+1)+'</th>';
+  let h = '<div class="table-block" data-tid="' + tid + '" contenteditable="false">';
+  h += '<table contenteditable="true"><thead><tr>'; for (let c=0;c<3;c++) h += '<th>标题'+(c+1)+'</th>';
   h += '</tr></thead><tbody>'; for (let r=0;r<2;r++){ h+='<tr>'; for(let c=0;c<3;c++) h+='<td>&nbsp;</td>'; h+='</tr>'; }
   h += '</tbody></table></div><p><br></p>';
   insertHtmlAtCursor(h);
@@ -1372,6 +1372,14 @@ function wrapBareTables() {
     c.style.paddingLeft = '';
     c.style.paddingRight = '';
     c.style.lineHeight = '';
+  });
+  // 规范化表格块的 contenteditable：外层 .table-block 不可编辑（使 Backspace/Delete 能整块删除），
+  // 内部 <table> 设为可编辑，覆盖父级 false，保证单元格仍可输入。
+  // 这样新建表格、粘贴表格、旧数据加载后都会被统一规范化，避免光标被困在空表格里删不掉。
+  canvas.querySelectorAll('.table-block').forEach(blk => {
+    if (blk.getAttribute('contenteditable') !== 'false') blk.setAttribute('contenteditable', 'false');
+    const tbl = blk.querySelector('table');
+    if (tbl && tbl.getAttribute('contenteditable') !== 'true') tbl.setAttribute('contenteditable', 'true');
   });
 }
 // 表格操作：在光标所在的 cell 上执行指定动作
@@ -2602,6 +2610,33 @@ canvas.addEventListener('paste', (e) => {
 });
 
 canvas.addEventListener('keydown', (e) => {
+  // Esc：光标被困在表格单元格里时，按 Esc 跳到表格后面的可编辑区，避免删不掉的困局
+  if (e.key === 'Escape') {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount) {
+      let node = sel.anchorNode;
+      if (node && node.nodeType === 3) node = node.parentElement;
+      const blk = node && node.closest ? node.closest('.table-block') : null;
+      if (blk) {
+        e.preventDefault();
+        // 找 table-block 后面第一个可编辑的 <p>；没有就建一个
+        let next = blk.nextSibling;
+        while (next && !(next.nodeType === 1 && next.tagName === 'P')) next = next.nextSibling;
+        let target = next;
+        if (!target) {
+          target = document.createElement('p');
+          target.innerHTML = '<br>';
+          blk.parentNode.insertBefore(target, blk.nextSibling);
+        }
+        const r = document.createRange();
+        r.selectNodeContents(target);
+        r.collapse(true);
+        sel.removeAllRanges(); sel.addRange(r);
+        saveCurrentPage();
+        return;
+      }
+    }
+  }
   // 修复：canvas 最开头或其他位置的不可编辑块（图片/视频/附件/表格/公式/代码块/待办）
   // 用 Backspace/Delete 删不掉的 bug——contenteditable=false 元素无法被默认行为跨过删除
   if (e.key === 'Backspace' || e.key === 'Delete') {
@@ -2857,7 +2892,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v22';
+      const C='md-notebook-v23';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
