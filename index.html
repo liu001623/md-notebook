@@ -236,20 +236,18 @@
   #canvas th { background: var(--th-bg); }
   /* 表格块包装层：自身无额外间距，交给内部 table 控制 */
   #canvas .table-block { margin: .4em 0; position: relative; }
-  /* 表格右下角缩放把手：鼠标拖动可等比例放大/缩小整表（含字号、行高、宽度） */
-  #canvas .table-block::after {
-    content: ''; position: absolute; right: -3px; bottom: -3px;
-    width: 14px; height: 14px;
-    background: linear-gradient(135deg, transparent 50%, var(--primary) 50%, var(--primary) 60%, transparent 60%, transparent 75%, var(--primary) 75%, var(--primary) 85%, transparent 85%);
-    cursor: nwse-resize; opacity: .55;
-    border-radius: 2px; pointer-events: auto; z-index: 5;
+  /* 表格底部高度调节把手：拖动改变容器可视高度，内容不变 */
+  .table-resize-handle {
+    height: 8px; margin: 2px 0 -2px; cursor: row-resize;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity .2s;
   }
-  #canvas .table-block:hover::after { opacity: 1; }
-  /* 缩放时把 table、th、td 的字号都用 em 单位，跟随 .table-block 的 font-size */
-  #canvas .table-block { font-size: 16px; }
-  #canvas .table-block table,
-  #canvas .table-block th,
-  #canvas .table-block td { font-size: inherit; }
+  .table-block:hover .table-resize-handle { opacity: 1; }
+  .table-resize-handle::after {
+    content: ''; display: block; width: 40px; height: 3px;
+    background: var(--muted); border-radius: 2px; opacity: .5;
+  }
+  .table-resize-handle:hover::after { background: var(--primary); opacity: .8; }
   #canvas img { max-width: 100%; border-radius: 6px; }
   #canvas mark { background: var(--mark-bg); color: inherit; padding: 0 2px; border-radius: 2px; }
   /* 隶属于 .att-wrap 的图片/视频以缩略图形式呈现，点击 lightbox 放大 */
@@ -1361,7 +1359,7 @@ function insertTable() {
   let h = '<div class="table-block" data-tid="' + tid + '" contenteditable="false">';
   h += '<table contenteditable="true"><thead><tr>'; for (let c=0;c<3;c++) h += '<th>标题'+(c+1)+'</th>';
   h += '</tr></thead><tbody>'; for (let r=0;r<2;r++){ h+='<tr>'; for(let c=0;c<3;c++) h+='<td>&nbsp;</td>'; h+='</tr>'; }
-  h += '</tbody></table></div><p><br></p>';
+  h += '</tbody></table><div class="table-resize-handle"></div></div><p><br></p>';
   insertHtmlAtCursor(h);
 }
 // 把 canvas 内不在 .table-block 内的裸 <table> 自动包一层 .table-block
@@ -1394,6 +1392,18 @@ function wrapBareTables() {
     if (blk.getAttribute('contenteditable') !== 'false') blk.setAttribute('contenteditable', 'false');
     const tbl = blk.querySelector('table');
     if (tbl && tbl.getAttribute('contenteditable') !== 'true') tbl.setAttribute('contenteditable', 'true');
+    // 确保有高度调节把手
+    if (!blk.querySelector('.table-resize-handle')) {
+      const handle = document.createElement('div');
+      handle.className = 'table-resize-handle';
+      blk.appendChild(handle);
+    }
+    // 恢复已有的固定高度设置（页面保存时 data-th 记录了用户设定的高度）
+    const th = blk.getAttribute('data-th');
+    if (th) {
+      blk.style.height = th + 'px';
+      blk.style.overflow = 'auto';
+    }
   });
 }
 // 表格操作：在光标所在的 cell 上执行指定动作
@@ -1783,64 +1793,40 @@ function endRowResize() {
   document.body.style.userSelect = '';
   saveCurrentPage();
 }
-/* ========== 表格右下角把手等比例缩放整表 ========== */
-let tableScale = null; // { block, startX, startY, startScale, startFontSize, tableWidth, anchorLeft, anchorTop }
-// 判断鼠标是否在 .table-block 的右下角缩放把手区域内
-function isOnTableScaleHandle(e, block) {
-  if (!block) return false;
-  const r = block.getBoundingClientRect();
-  // 右下角 18×18 区域为缩放把手（把 ::after 的 14px 扩大一点容差，便于点中）
-  return e.clientX >= r.right - 18 && e.clientX <= r.right + 4 &&
-         e.clientY >= r.bottom - 18 && e.clientY <= r.bottom + 4;
-}
-function startTableScale(block, clientX, clientY) {
-  const tbl = block.querySelector('table');
-  if (!tbl) return false;
-  // 获取或初始化当前缩放比例（默认 1）
-  let scale = parseFloat(block.getAttribute('data-scale') || '1');
-  if (!scale || isNaN(scale)) scale = 1;
-  // 记录初始表格字号、表格宽度、鼠标起始位置、缩放钝点（以表格左上角为钝点）
-  const tblRect = tbl.getBoundingClientRect();
-  const blkRect = block.getBoundingClientRect();
-  tableScale = {
-    block,
-    startX: clientX,
-    startY: clientY,
-    startScale: scale,
-    startFontSize: parseFloat(getComputedStyle(tbl).fontSize) || 16,
-    startTableWidth: tblRect.width,
-    // 以表格左上角为钝点（鼠标到钝点的距离变化作为缩放依据）
-    anchorLeft: tblRect.left,
-    anchorTop: tblRect.top
-  };
+/* ========== 表格底部把手调整容器可视高度 ========== */
+let tableResize = null; // { block, startY, startHeight }
+function startTableHeightDrag(block, clientY) {
+  // 获取当前高度：已有 data-th 用它，否则用 offsetHeight 作为起始值
+  let h = parseInt(block.getAttribute('data-th')) || block.offsetHeight;
+  if (h < 60) h = 60;
+  tableResize = { block, startY: clientY, startHeight: h };
+  block.style.height = h + 'px';
+  block.style.overflow = 'auto';
   return true;
 }
-function moveTableScale(clientX, clientY) {
-  if (!tableScale) return;
-  const ts = tableScale;
-  // 计算鼠标到钝点的当前距离与初始距离的比值
-  const dxStart = ts.startX - ts.anchorLeft;
-  const dyStart = ts.startY - ts.anchorTop;
-  const distStart = Math.sqrt(dxStart * dxStart + dyStart * dyStart);
-  const dxNow = clientX - ts.anchorLeft;
-  const dyNow = clientY - ts.anchorTop;
-  const distNow = Math.sqrt(dxNow * dxNow + dyNow * dyNow);
-  if (distStart <= 0) return;
-  let ratio = distNow / distStart;
-  let newScale = ts.startScale * ratio;
-  // 限制缩放范围：0.4x ~ 3x，避免极限值表格不可用
-  if (newScale < 0.4) newScale = 0.4;
-  if (newScale > 3) newScale = 3;
-  // 应用：表格整体 font-size 跟随缩放，表格宽度按新比例与初始宽度的比值调整
-  ts.block.style.fontSize = (ts.startFontSize * newScale) + 'px';
-  ts.block.setAttribute('data-scale', newScale.toFixed(3));
-  // 表格宽度同步按缩放比例调整（以初始宽度为墓准）
-  const tbl = ts.block.querySelector('table');
-  if (tbl) tbl.style.width = (ts.startTableWidth * newScale / ts.startScale) + 'px';
+function moveTableHeightDrag(clientY) {
+  if (!tableResize) return;
+  const dy = clientY - tableResize.startY;
+  let newH = tableResize.startHeight + dy;
+  if (newH < 60) newH = 60;
+  tableResize.block.style.height = newH + 'px';
+  tableResize.block.setAttribute('data-th', newH);
 }
-function endTableScale() {
-  if (!tableScale) return;
-  tableScale = null;
+function endTableHeightDrag() {
+  if (!tableResize) return;
+  const block = tableResize.block;
+  // 如果高度 >= 内容自然高度 + 10px，去掉固定高度（避免不必要的滚动条）
+  const tbl = block.querySelector('table');
+  if (tbl) {
+    const contentH = tbl.scrollHeight;
+    const curH = parseInt(block.getAttribute('data-th')) || 0;
+    if (curH >= contentH + 10) {
+      block.style.height = '';
+      block.style.overflow = '';
+      block.removeAttribute('data-th');
+    }
+  }
+  tableResize = null;
   document.body.style.cursor = '';
   document.body.style.userSelect = '';
   saveCurrentPage();
@@ -1849,13 +1835,10 @@ function endTableScale() {
 canvas.addEventListener('mousemove', (e) => {
   if (colResize) { moveColResize(e.clientX); return; }
   if (rowResize) { moveRowResize(e.clientY); return; }
-  if (tableScale) { moveTableScale(e.clientX, e.clientY); return; }
-  // 优先检查是否悬停在表格缩放把手上
-  const scaleBlock = e.target.closest ? e.target.closest('.table-block') : null;
-  if (scaleBlock && isOnTableScaleHandle(e, scaleBlock)) {
-    document.body.style.cursor = 'nwse-resize';
-    return;
-  }
+  if (tableResize) { moveTableHeightDrag(e.clientY); return; }
+  // 检查是否悬停在表格高度调节把手上
+  const handle = e.target.closest ? e.target.closest('.table-resize-handle') : null;
+  if (handle) { document.body.style.cursor = 'row-resize'; return; }
   document.body.style.cursor = '';
   const cell = e.target.closest('td, th');
   if (!cell) return;
@@ -1863,15 +1846,18 @@ canvas.addEventListener('mousemove', (e) => {
   cell.style.cursor = edge === 'right' ? 'col-resize' : (edge === 'bottom' ? 'row-resize' : '');
 });
 canvas.addEventListener('mousedown', (e) => {
-  // 优先检查表格缩放把手：点中右下角把手 → 启动整表缩放
-  const scaleBlock = e.target.closest ? e.target.closest('.table-block') : null;
-  if (scaleBlock && isOnTableScaleHandle(e, scaleBlock)) {
-    e.preventDefault();
-    if (startTableScale(scaleBlock, e.clientX, e.clientY)) {
-      document.body.style.cursor = 'nwse-resize';
-      document.body.style.userSelect = 'none';
+  // 优先检查表格高度调节把手：点中底部把手 → 启动容器高度拖动
+  const handle = e.target.closest ? e.target.closest('.table-resize-handle') : null;
+  if (handle) {
+    const block = handle.closest('.table-block');
+    if (block) {
+      e.preventDefault();
+      if (startTableHeightDrag(block, e.clientY)) {
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+      }
+      return;
     }
-    return;
   }
   const cell = e.target.closest('td, th');
   if (!cell) return;
@@ -1893,19 +1879,22 @@ canvas.addEventListener('mousedown', (e) => {
 document.addEventListener('mousemove', (e) => {
   if (colResize) moveColResize(e.clientX);
   else if (rowResize) moveRowResize(e.clientY);
-  else if (tableScale) moveTableScale(e.clientX, e.clientY);
+  else if (tableResize) moveTableHeightDrag(e.clientY);
 });
-document.addEventListener('mouseup', () => { if (colResize) endColResize(); else if (rowResize) endRowResize(); else if (tableScale) endTableScale(); });
-// 手机长按表格 → 菜单；但触摸单元格边缘时优先列宽/行高拖拉；点中右下角把手 → 整表缩放
+document.addEventListener('mouseup', () => { if (colResize) endColResize(); else if (rowResize) endRowResize(); else if (tableResize) endTableHeightDrag(); });
+// 手机长按表格 → 菜单；但触摸单元格边缘时优先列宽/行高拖拉；触摸把手 → 容器高度调节
 canvas.addEventListener('touchstart', (e) => {
   const touch = e.touches[0];
-  // 优先检查表格缩放把手
-  const scaleBlock = e.target.closest ? e.target.closest('.table-block') : null;
-  if (scaleBlock && isOnTableScaleHandle(touch, scaleBlock)) {
-    e.preventDefault();
-    clearTimeout(tableCtxTimer);
-    startTableScale(scaleBlock, touch.clientX, touch.clientY);
-    return;
+  // 优先检查表格高度调节把手
+  const handle = e.target.closest ? e.target.closest('.table-resize-handle') : null;
+  if (handle) {
+    const block = handle.closest('.table-block');
+    if (block) {
+      e.preventDefault();
+      clearTimeout(tableCtxTimer);
+      startTableHeightDrag(block, touch.clientY);
+      return;
+    }
   }
   const cell = e.target.closest('td, th');
   if (!cell) return;
@@ -1939,9 +1928,9 @@ canvas.addEventListener('touchmove', (e) => {
     moveRowResize(e.touches[0].clientY);
     return;
   }
-  if (tableScale) {
+  if (tableResize) {
     e.preventDefault();
-    moveTableScale(e.touches[0].clientX, e.touches[0].clientY);
+    moveTableHeightDrag(e.touches[0].clientY);
     return;
   }
   clearTimeout(tableCtxTimer);
@@ -1949,7 +1938,7 @@ canvas.addEventListener('touchmove', (e) => {
 canvas.addEventListener('touchend', () => {
   if (colResize) { endColResize(); return; }
   if (rowResize) { endRowResize(); return; }
-  if (tableScale) { endTableScale(); return; }
+  if (tableResize) { endTableHeightDrag(); return; }
   clearTimeout(tableCtxTimer);
 });
 // 点击页面其他位置关闭菜单
