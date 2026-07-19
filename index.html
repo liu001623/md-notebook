@@ -188,14 +188,14 @@
   }
   #canvas {
     max-width: 1100px; margin: 0 auto; background: var(--canvas-bg);
-    padding: 24px 16px; min-height: calc(100% - 0px);
+    padding: 28px 36px; min-height: calc(100% - 0px);
     border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.05);
     outline: none; font-size: 16px; line-height: 1.75;
     word-wrap: break-word; overflow-wrap: break-word;
   }
-  /* 手机/窄屏：编辑区全宽，左右留白更紧凑 */
+  /* 手机/窄屏：编辑区全宽，左右留白适度收紧以免内容被过多压缩 */
   @media (max-width: 759px) {
-    #canvas { max-width: 100%; padding: 18px 12px; }
+    #canvas { max-width: 100%; padding: 20px 18px; }
   }
   #canvas:empty::before {
     content: attr(data-placeholder); color: var(--muted); font-style: italic; pointer-events: none;
@@ -228,9 +228,9 @@
   #canvas th, #canvas td,
   #canvas .table-block th, #canvas .table-block td {
     border: 1px solid var(--border);
-    padding: 3px 7px !important;
+    padding: 8px 12px;
     font-size: .94em;
-    line-height: 1.35 !important;
+    line-height: 1.5;
     word-break: break-word; overflow-wrap: anywhere; box-sizing: border-box;
   }
   #canvas th { background: var(--th-bg); }
@@ -2857,7 +2857,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v21';
+      const C='md-notebook-v22';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
