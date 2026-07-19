@@ -126,7 +126,8 @@
   }
   #pageTitle:focus { background: var(--panel); border-color: var(--primary); }
 
-  /* ===== 工具栏（横向滚动） ===== */
+  /* ===== 工具栏 ===== */
+  /* 默认（手机/窄屏）：横向滚动 */
   .toolbar {
     display: flex; gap: 6px; padding: 6px 10px;
     background: var(--panel); border-bottom: 1px solid var(--border);
@@ -135,6 +136,14 @@
     flex-shrink: 0; scrollbar-width: none;
   }
   .toolbar::-webkit-scrollbar { display: none; }
+  /* 电脑/宽屏：自动换行，展示全部按键 */
+  @media (min-width: 760px) {
+    .toolbar {
+      flex-wrap: wrap; overflow: visible;
+      scrollbar-width: auto;
+    }
+    .toolbar::-webkit-scrollbar { display: block; }
+  }
   .tg {
     display: flex; gap: 1px; padding: 2px;
     border: 1px solid var(--border); border-radius: 8px;
@@ -715,7 +724,7 @@ function getDefaultHtml() {
 <span class="math-block" data-latex="\\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}" contenteditable="false"></span>
 <h2>使用提示</h2>
 <ol>
-<li>选中文字后点工具栏按钮应用样式（横滑查看更多）</li>
+<li>选中文字后点工具栏按钮应用样式（手机端可横滑，电脑端窗口变窄时工具栏自动换行）</li>
 <li>点右上角 ⋯ 打开菜单：新建/导入/导出/删除</li>
 <li><strong>双击公式</strong>可重新编辑 LaTeX 源码</li>
 <li>可「添加到主屏幕」当 App 用，全屏体验</li>
