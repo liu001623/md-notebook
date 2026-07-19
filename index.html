@@ -1699,6 +1699,7 @@ canvas.addEventListener('contextmenu', (e) => {
 /* ========== 表格列宽/行高拖拉（鼠标 + 触摸） ========== */
 let colResize = null; // { startX, startWidths, cells }
 let rowResize = null; // { startY, startHeights, cells }
+let tblContainerResize = null; // { block, startY, startHeight }
 // 检测鼠标/手指是否在单元格边缘上：右边沿→列宽，下边沿→行高
 function cellEdgeMode(cell, clientX, clientY) {
   const r = cell.getBoundingClientRect();
@@ -1769,16 +1770,61 @@ function endRowResize() {
   document.body.style.userSelect = '';
   saveCurrentPage();
 }
+/* ========== 表格容器高度拖拽（纯坐标检测，不添加任何DOM元素） ========== */
+// 检测鼠标/手指是否在某个 .table-block 的底部边缘（底部 8px 范围）
+function getBlkAtBottom(clientX, clientY) {
+  const blocks = canvas.querySelectorAll('.table-block');
+  for (const blk of blocks) {
+    const r = blk.getBoundingClientRect();
+    if (clientX >= r.left && clientX <= r.right && clientY >= r.bottom - 8 && clientY <= r.bottom + 4) return blk;
+  }
+  return null;
+}
+function moveTblContainerResize(clientY) {
+  if (!tblContainerResize) return;
+  const dy = clientY - tblContainerResize.startY;
+  let h = tblContainerResize.startHeight + dy;
+  if (h < 40) h = 40;
+  tblContainerResize.block.style.height = h + 'px';
+}
+function endTblContainerResize() {
+  if (!tblContainerResize) return;
+  tblContainerResize = null;
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  saveCurrentPage();
+}
 // 鼠标：在表格单元格上检测边缘 → 对应光标；按下 → 拖拉
 canvas.addEventListener('mousemove', (e) => {
   if (colResize) { moveColResize(e.clientX); return; }
   if (rowResize) { moveRowResize(e.clientY); return; }
+  // 表格容器底部边缘检测（优先于单元格边缘）
+  const blk = getBlkAtBottom(e.clientX, e.clientY);
+  if (blk) {
+    const c = e.target.closest('td, th');
+    if (c) c.style.cursor = '';
+    document.body.style.cursor = 'ns-resize';
+    return;
+  }
+  if (document.body.style.cursor === 'ns-resize') document.body.style.cursor = '';
   const cell = e.target.closest('td, th');
   if (!cell) return;
   const edge = cellEdgeMode(cell, e.clientX, e.clientY);
   cell.style.cursor = edge === 'right' ? 'col-resize' : (edge === 'bottom' ? 'row-resize' : '');
 });
 canvas.addEventListener('mousedown', (e) => {
+  // 表格容器底部边缘拖拽
+  const blk = getBlkAtBottom(e.clientX, e.clientY);
+  if (blk) {
+    e.preventDefault();
+    const r = blk.getBoundingClientRect();
+    tblContainerResize = { block: blk, startY: e.clientY, startHeight: r.height };
+    blk.style.height = r.height + 'px';
+    blk.style.overflow = 'auto';
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+    return;
+  }
   const cell = e.target.closest('td, th');
   if (!cell) return;
   const edge = cellEdgeMode(cell, e.clientX, e.clientY);
@@ -1799,13 +1845,25 @@ canvas.addEventListener('mousedown', (e) => {
 document.addEventListener('mousemove', (e) => {
   if (colResize) moveColResize(e.clientX);
   else if (rowResize) moveRowResize(e.clientY);
+  else if (tblContainerResize) moveTblContainerResize(e.clientY);
 });
-document.addEventListener('mouseup', () => { if (colResize) endColResize(); else if (rowResize) endRowResize(); });
+document.addEventListener('mouseup', () => { if (colResize) endColResize(); else if (rowResize) endRowResize(); else if (tblContainerResize) endTblContainerResize(); });
 // 手机触摸：长按表格 → 菜单；触摸单元格边缘时优先列宽/行高拖拉
 canvas.addEventListener('touchstart', (e) => {
+  const touch = e.touches[0];
+  // 表格容器底部边缘拖拽（触摸）
+  const blk = getBlkAtBottom(touch.clientX, touch.clientY);
+  if (blk) {
+    e.preventDefault();
+    clearTimeout(tableCtxTimer);
+    const r = blk.getBoundingClientRect();
+    tblContainerResize = { block: blk, startY: touch.clientY, startHeight: r.height };
+    blk.style.height = r.height + 'px';
+    blk.style.overflow = 'auto';
+    return;
+  }
   const cell = e.target.closest('td, th');
   if (!cell) return;
-  const touch = e.touches[0];
   const edge = cellEdgeMode(cell, touch.clientX, touch.clientY);
   if (edge === 'right') {
     e.preventDefault();
@@ -1832,15 +1890,21 @@ canvas.addEventListener('touchmove', (e) => {
     return;
   }
   if (rowResize) {
-    e.preventDefault();
-    moveRowResize(e.touches[0].clientY);
-    return;
-  }
-  clearTimeout(tableCtxTimer);
+      e.preventDefault();
+      moveRowResize(e.touches[0].clientY);
+      return;
+    }
+    if (tblContainerResize) {
+      e.preventDefault();
+      moveTblContainerResize(e.touches[0].clientY);
+      return;
+    }
+    clearTimeout(tableCtxTimer);
 }, { passive: false });
 canvas.addEventListener('touchend', () => {
   if (colResize) { endColResize(); return; }
   if (rowResize) { endRowResize(); return; }
+  if (tblContainerResize) { endTblContainerResize(); return; }
   clearTimeout(tableCtxTimer);
 });
 // 点击页面其他位置关闭菜单
@@ -2892,7 +2956,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v25';
+      const C='md-notebook-v26';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
