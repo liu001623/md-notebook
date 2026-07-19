@@ -1791,11 +1791,10 @@ function endTblContainerResize() {
   if (!tblContainerResize) return;
   const blk = tblContainerResize.block;
   const h = blk.style.height;
-  // 保留固定高度但恢复内层 table 的 overflow
+  // 保留固定高度和内层 overflow 设置，让容器持续撑开
   const inner = tblContainerResize.inner;
   tblContainerResize = null;
-  if (inner) { inner.style.overflowX = ''; inner.style.display = ''; }
-  // 如果高度恰好等于内容高度，去掉固定高度
+  // 不重置 inner 的 overflowX 和 display，保持拖拽后的状态
   if (h) blk.style.height = h;
   document.body.style.cursor = '';
   document.body.style.userSelect = '';
