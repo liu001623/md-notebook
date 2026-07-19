@@ -1575,8 +1575,19 @@ async function renderAttachments() {
       if (url) media.src = url;
       else {
         const meta = state.attachments ? state.attachments[id] : null;
-        if (meta && meta.cloudPath) {
-          media.src = 'https://raw.githubusercontent.com/' + GH.owner + '/' + GH.repo + '/main/' + meta.cloudPath;
+        let cPath = meta && meta.cloudPath ? meta.cloudPath : null;
+        // 如果元数据中没有 cloudPath，尝试用约定路径构造
+        if (!cPath && meta && meta.filename) {
+          cPath = `files/${id}/${encodeURIComponent(meta.filename)}`;
+        }
+        if (cPath) {
+          media.src = 'https://raw.githubusercontent.com/' + GH.owner + '/' + GH.repo + '/main/' + cPath;
+        }
+      }
+    }
+  }
+        if (cPath) {
+          media.src = 'https://raw.githubusercontent.com/' + GH.owner + '/' + GH.repo + '/main/' + cPath;
         }
       }
     }
@@ -2404,22 +2415,26 @@ async function ghDownloadAttachment(attId, meta) {
     const bytes = base64ToBytes(j.content);
     const blob = new Blob([bytes], { type: meta.type });
     await idbAttPut({ id: attId, ...meta, blob, accessedAt: Date.now() });
-  } catch(e) {}
+  } catch(e) { console.warn('下载附件失败:', attId, e.message); }
 }
 // 同步所有附件：上传未同步的 + 下载本地缺失的
 async function syncAttachments() {
   if (!ghToken()) return;
   if (state.attachments) {
-    for (const id of Object.keys(state.attachments)) {
+    // 先上传未同步的附件
+    const ids = Object.keys(state.attachments);
+    for (const id of ids) {
       if (!state.attachments[id].cloudUploaded) await ghUploadAttachment(id);
     }
-    for (const id of Object.keys(state.attachments)) {
+    // 下载本地缺失的附件（并行下载，单个失败不阻塞）
+    const downloads = ids.map(id => {
       const m = state.attachments[id];
-      if (m.cloudUploaded && m.cloudPath) {
-        const local = await idbAttGet(id);
-        if (!local) await ghDownloadAttachment(id, m);
+      if (m && m.cloudUploaded && m.cloudPath) {
+        return ghDownloadAttachment(id, m).catch(()=>{});
       }
-    }
+      return Promise.resolve();
+    });
+    await Promise.all(downloads);
   }
   renderAttachments();
 }
