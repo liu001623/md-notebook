@@ -138,6 +138,7 @@
     cursor: pointer; color: var(--text); font-size: 14px;
     display: inline-flex; align-items: center; justify-content: center; gap: 3px;
     white-space: nowrap; font-family: inherit;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
   }
   .btn:active { background: var(--active); }
 
@@ -829,13 +830,12 @@ function renderMathInCanvas() {
 document.execCommand('styleWithCSS', false, true);
 function exec(cmd, val) { canvas.focus(); document.execCommand(cmd, false, val); saveCurrentPage(); }
 
-// touchstart 阻止按钮获焦，保留画布选区
-document.getElementById('toolbar').addEventListener('touchstart', (e) => {
-  const btn = e.target.closest('.btn'); if (btn) e.preventDefault();
-}, { passive: false });
+// 仅在 mousedown 上 preventDefault 阻止按钮获焦、保留画布选区；切勿在 touchstart 上 preventDefault 否则会取消合成的 click 事件导致手机端工具栏失灵
 document.getElementById('toolbar').addEventListener('mousedown', (e) => {
   const btn = e.target.closest('.btn'); if (btn) e.preventDefault();
-});
+}, { passive: false });
+// 同时在 touchstart 上 preventDefault 阻止 iOS 上长按选区菜单弹出（但仅针对非按钮元素，不影响 click 合成）
+document.getElementById('toolbar').addEventListener('contextmenu', (e) => e.preventDefault());
 document.getElementById('toolbar').addEventListener('click', (e) => {
   const btn = e.target.closest('.btn'); if (!btn) return;
   document.querySelectorAll('.color-wrap').forEach(w => w.classList.remove('open'));
@@ -893,6 +893,27 @@ function formatSize(bytes) {
   if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
   return (bytes/1048576).toFixed(1) + ' MB';
 }
+// iOS/部分 Android 上 file.type 可能为空（HEIC、MOV 等），按扩展名兜底推断 MIME
+function guessMimeType(filename) {
+  const ext = (filename.split('.').pop() || '').toLowerCase();
+  const map = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+    webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml',
+    heic: 'image/heic', heif: 'image/heif', tif: 'image/tiff', tiff: 'image/tiff',
+    mp4: 'video/mp4', m4v: 'video/x-m4v', mov: 'video/quicktime',
+    avi: 'video/x-msvideo', mkv: 'video/x-matroska', webm: 'video/webm',
+    flv: 'video/x-flv', wmv: 'video/x-ms-wmv', '3gp': 'video/3gpp', '3g2': 'video/3gpp2',
+    mp3: 'audio/mpeg', wav: 'audio/wav', aac: 'audio/aac', flac: 'audio/flac',
+    ogg: 'audio/ogg', oga: 'audio/ogg', m4a: 'audio/mp4', m4b: 'audio/mp4', wma: 'audio/x-ms-wma',
+    pdf: 'application/pdf',
+    doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    zip: 'application/zip', rar: 'application/x-rar-compressed', '7z': 'application/x-7z-compressed', gz: 'application/gzip', tar: 'application/x-tar',
+    txt: 'text/plain', md: 'text/markdown', csv: 'text/csv', json: 'application/json', xml: 'application/xml', html: 'text/html'
+  };
+  return map[ext] || 'application/octet-stream';
+}
 function arrayBufferToBase64(buf) {
   let binary = '';
   const bytes = new Uint8Array(buf);
@@ -915,23 +936,23 @@ async function handleAttachments(files) {
       continue;
     }
     const id = 'att_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const type = file.type || guessMimeType(file.name);
     const meta = {
       id, filename: file.name,
-      type: file.type || 'application/octet-stream',
-      size: file.size, createdAt: Date.now(),
+      type, size: file.size, createdAt: Date.now(),
       cloudUploaded: false, cloudPath: ''
     };
     await idbAttPut({ id, ...meta, blob: file, accessedAt: Date.now() });
     if (!state.attachments) state.attachments = {};
     state.attachments[id] = meta;
     await saveState();
-    insertAttachmentHtml(id, meta);
+    await insertAttachmentHtml(id, meta);
     scheduleSync();
     attLRUCleanup();
     setSyncStatus('附件已添加·待同步');
   }
 }
-function insertAttachmentHtml(id, meta) {
+async function insertAttachmentHtml(id, meta) {
   const mt = meta.type || '';
   let html = '';
   if (mt.startsWith('image/')) {
@@ -942,16 +963,16 @@ function insertAttachmentHtml(id, meta) {
     html = `<div class="att-wrap" data-att="${id}" contenteditable="false"><audio class="att-audio" controls></audio></div><p><br></p>`;
   } else {
     const icon = fileIcon(mt);
-    html = `<div class="att-file" data-att="${id}" contenteditable="false"><span class="att-icon">${icon}</span><span class="att-name">${escapeHtml(meta.filename)}</span><span class="att-size">${formatSize(meta.size)}</span><span class="att-dl">📥</span></div><p><br></p>`;
+    html = `<div class="att-file" data-att="${id}" contenteditable="false"><span class="att-icon">${icon}</span><span class="att-name">${escapeHtml(meta.filename)}</span><span class="att-size">${formatSize(meta.size)}</span><span class="att-dl">📩</span></div><p><br></p>`;
   }
   insertHtmlAtCursor(html);
-  getAttBlobUrl(id).then(url => {
-    if (!url) return;
-    const el = canvas.querySelector(`[data-att="${id}"]`);
-    if (!el) return;
+  // 先拿到本地 blob URL 再赋值，避免先保存无 src 的 innerHTML 造成刷新后回退云端 URL
+  const url = await getAttBlobUrl(id);
+  const el = canvas.querySelector(`[data-att="${id}"]`);
+  if (el) {
     const media = el.querySelector('img, video, audio');
-    if (media) media.src = url;
-  });
+    if (media && url) media.src = url;
+  }
   saveCurrentPage();
 }
 async function renderAttachments() {
@@ -1536,7 +1557,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v2';
+      const C='md-notebook-v3';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
