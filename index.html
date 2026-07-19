@@ -236,15 +236,6 @@
   #canvas th { background: var(--th-bg); }
   /* 表格块包装层：自身无额外间距，交给内部 table 控制 */
   #canvas .table-block { margin: .4em 0; }
-  /* 表格底部高度调节浮动指示条（fixed 定位，不受 overflow 裁剪，始终可见） */
-  #tableResizeIndicator {
-    position: fixed; height: 6px; display: none; align-items: center; justify-content: center;
-    pointer-events: none; z-index: 100;
-  }
-  #tableResizeIndicator::after {
-    content: ''; display: block; width: 48px; height: 4px;
-    background: var(--primary); border-radius: 2px; opacity: .7;
-  }
   #canvas img { max-width: 100%; border-radius: 6px; }
   #canvas mark { background: var(--mark-bg); color: inherit; padding: 0 2px; border-radius: 2px; }
   /* 隶属于 .att-wrap 的图片/视频以缩略图形式呈现，点击 lightbox 放大 */
@@ -598,12 +589,11 @@
     </div>
   </div>
 
-   <div class="canvas-wrap">
-     <div id="canvas" contenteditable="true" spellcheck="false" data-placeholder="点击此处开始编写…"></div>
-   </div>
-   <div id="tableResizeIndicator"></div>
+    <div class="canvas-wrap">
+      <div id="canvas" contenteditable="true" spellcheck="false" data-placeholder="点击此处开始编写…"></div>
+    </div>
 
-   <div class="statusbar">
+    <div class="statusbar">
     <span id="statLeft">页面数: 0</span>
     <span id="statRight">就绪</span>
   </div>
@@ -1789,7 +1779,6 @@ function endRowResize() {
 let tableResize = null; // { block, startY, startHeight }
 /* ========== 表格底部边缘拖动调整容器可视高度 ========== */
 let tableResize = null; // { block, startY, startHeight }
-const resizeIndicator = () => document.getElementById('tableResizeIndicator');
 // 判断鼠标是否在某个 .table-block 的底部边缘 14px 区域内（纯坐标计算，不依赖把手 DOM）
 function getTableAtBottom(e) {
   const blocks = canvas.querySelectorAll('.table-block');
@@ -1802,24 +1791,12 @@ function getTableAtBottom(e) {
   }
   return null;
 }
-// 显示/隐藏浮动指示条
-function showResizeIndicator(block) {
-  const ind = resizeIndicator(); if (!ind || !block) return;
-  const r = block.getBoundingClientRect();
-  ind.style.display = 'flex';
-  ind.style.left = (r.left + r.width / 2 - 24) + 'px';
-  ind.style.top = (r.bottom - 3) + 'px';
-}
-function hideResizeIndicator() {
-  const ind = resizeIndicator(); if (ind) ind.style.display = 'none';
-}
 function startTableHeightDrag(block, clientY) {
   let h = parseInt(block.getAttribute('data-th')) || block.offsetHeight;
   if (h < 60) h = 60;
   tableResize = { block, startY: clientY, startHeight: h };
   block.style.height = h + 'px';
   block.style.overflow = 'hidden';
-  hideResizeIndicator();
   return true;
 }
 function moveTableHeightDrag(clientY) {
@@ -1859,10 +1836,8 @@ canvas.addEventListener('mousemove', (e) => {
   const blk = getTableAtBottom(e);
   if (blk) {
     document.body.style.cursor = 'row-resize';
-    showResizeIndicator(blk);
     return;
   }
-  hideResizeIndicator();
   document.body.style.cursor = '';
   const cell = e.target.closest('td, th');
   if (!cell) return;
