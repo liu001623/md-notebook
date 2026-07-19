@@ -221,7 +221,7 @@
   #canvas a { color: var(--primary); word-break: break-all; }
   #canvas hr { border: none; border-top: 1px dashed var(--border); margin: 1.4em 0; }
   #canvas table { border-collapse: collapse; margin: 1em 0; max-width: 100%; display: block; overflow-x: auto; word-break: break-word; }
-  #canvas th, #canvas td { border: 1px solid var(--border); padding: 6px 10px; font-size: .95em; word-break: break-word; overflow-wrap: anywhere; }
+  #canvas th, #canvas td { border: 1px solid var(--border); padding: 6px 10px; font-size: .95em; word-break: break-word; overflow-wrap: anywhere; box-sizing: border-box; }
   #canvas th { background: var(--th-bg); }
   #canvas img { max-width: 100%; border-radius: 6px; }
   #canvas mark { background: var(--mark-bg); color: inherit; padding: 0 2px; border-radius: 2px; }
@@ -446,6 +446,11 @@
   .table-ctx-menu .ctx-item.danger { color: var(--danger); }
   .table-ctx-menu .ctx-sep { height: 1px; background: var(--border); margin: 4px 0; }
   .table-ctx-menu .ctx-title { padding: 4px 12px; font-size: 11px; color: var(--muted); }
+  .table-ctx-menu .ctx-subtitle { padding: 4px 12px 2px; font-size: 11px; color: var(--muted); }
+  /* 对齐按钮三列网格 */
+  .table-ctx-menu .ctx-grid { display: flex; gap: 2px; padding: 0 4px; }
+  .table-ctx-menu .ctx-grid .ctx-item { flex: 1; justify-content: center; padding: 8px 0; font-size: 14px; }
+  .table-ctx-menu .ctx-grid .ctx-item.active { background: var(--primary); color: #fff; }
   .todo-item {
     display: flex; align-items: flex-start; gap: 8px;
     padding: 4px 0; line-height: 1.5;
@@ -1240,8 +1245,35 @@ function tableAction(action, cell) {
     case 'delrow': { if (rows.length<=1) return; row.parentNode.removeChild(row); break; }
     case 'delcol': { if (row.children.length<=1) return; rows.forEach(r => { if (r.children[cellIndex]) r.removeChild(r.children[cellIndex]); }); break; }
     case 'deltable': { const block = tbl.closest('.table-block'); if (block) { const p = block.nextSibling; block.parentNode.removeChild(block); } return; }
+    case 'alignleft': case 'aligncenter': case 'alignright': {
+      const v = action === 'alignleft' ? 'left' : (action === 'aligncenter' ? 'center' : 'right');
+      getSelectedCells(cell).forEach(c => c.style.textAlign = v);
+      break;
+    }
+    case 'valigntop': case 'valignmiddle': case 'valignbottom': {
+      const v = action === 'valigntop' ? 'top' : (action === 'valignmiddle' ? 'middle' : 'bottom');
+      getSelectedCells(cell).forEach(c => c.style.verticalAlign = v);
+      break;
+    }
   }
   saveCurrentPage();
+}
+// 获取对齐操作的目标单元格集合：若选区在表格内则取选区所有单元格，否则仅当前 cell
+function getSelectedCells(cell) {
+  const sel = window.getSelection();
+  const cells = new Set();
+  if (sel && sel.rangeCount && !sel.isCollapsed) {
+    const range = sel.getRangeAt(0);
+    const tbl = cell.closest('table');
+    if (tbl && tbl.contains(range.commonAncestorContainer)) {
+      // 用 intersectsNode 遍历表格所有单元格，命中选区的加入集合
+      tbl.querySelectorAll('td, th').forEach(c => {
+        try { if (range.intersectsNode(c)) cells.add(c); } catch (e) {}
+      });
+      if (cells.size > 0) return Array.from(cells);
+    }
+  }
+  return [cell];
 }
 function insertCodeBlock() { insertHtmlAtCursor('<pre><code>// 代码\nfunction hello() {\n  console.log("hi");\n}</code></pre><p><br></p>'); }
 function insertHtmlAtCursor(html) {
@@ -1426,6 +1458,8 @@ let tableCtxMenu = null, tableCtxTimer = null, tableCtxCell = null;
 function showTableCtxMenu(cell, x, y) {
   closeTableCtxMenu();
   tableCtxCell = cell;
+  const ta = (cell.style.textAlign || '').toLowerCase();
+  const va = (cell.style.verticalAlign || '').toLowerCase();
   const menu = document.createElement('div');
   menu.className = 'table-ctx-menu';
   menu.innerHTML = '<div class="ctx-title">表格操作</div>'
@@ -1433,6 +1467,19 @@ function showTableCtxMenu(cell, x, y) {
     + '<div class="ctx-item" data-tt="down">⬇ 下方插行</div>'
     + '<div class="ctx-item" data-tt="left">⬅ 左侧插列</div>'
     + '<div class="ctx-item" data-tt="right">➡ 右侧插列</div>'
+    + '<div class="ctx-sep"></div>'
+    + '<div class="ctx-subtitle">水平对齐</div>'
+    + '<div class="ctx-grid">'
+    + '<div class="ctx-item' + (ta==='left'?' active':'') + '" data-tt="alignleft">⬅</div>'
+    + '<div class="ctx-item' + (ta==='center'?' active':'') + '" data-tt="aligncenter">↔</div>'
+    + '<div class="ctx-item' + (ta==='right'?' active':'') + '" data-tt="alignright">➡</div>'
+    + '</div>'
+    + '<div class="ctx-subtitle">垂直对齐</div>'
+    + '<div class="ctx-grid">'
+    + '<div class="ctx-item' + (va==='top'?' active':'') + '" data-tt="valigntop">⬆</div>'
+    + '<div class="ctx-item' + (va==='middle'?' active':'') + '" data-tt="valignmiddle">⬇</div>'
+    + '<div class="ctx-item' + (va==='bottom'?' active':'') + '" data-tt="valignbottom">⍗</div>'
+    + '</div>'
     + '<div class="ctx-sep"></div>'
     + '<div class="ctx-item danger" data-tt="delrow">✕ 删行</div>'
     + '<div class="ctx-item danger" data-tt="delcol">✕ 删列</div>'
@@ -1465,19 +1512,95 @@ canvas.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   showTableCtxMenu(cell, e.clientX, e.clientY);
 });
-// 手机长按表格
+/* ========== 表格列宽拖拉（鼠标 + 触摸） ========== */
+let colResize = null; // { startX, startWidths, cells }
+function cellEdgeMode(cell, clientX) {
+  const r = cell.getBoundingClientRect();
+  if (clientX >= r.right - 6 && clientX <= r.right + 4) return 'right';
+  return null;
+}
+function startColResize(cell, clientX) {
+  const tbl = cell.closest('table');
+  if (!tbl) return false;
+  const row = cell.closest('tr');
+  const colIdx = Array.prototype.indexOf.call(row.children, cell);
+  const rows = tbl.querySelectorAll('tr');
+  const cells = [];
+  rows.forEach(r => { if (r.children[colIdx]) cells.push(r.children[colIdx]); });
+  if (!cells.length) return false;
+  // 固定 table-layout 让 width 生效
+  tbl.style.tableLayout = 'fixed';
+  const startWidths = cells.map(c => c.getBoundingClientRect().width);
+  cells.forEach((c, i) => { c.style.width = startWidths[i] + 'px'; });
+  colResize = { startX: clientX, startWidths, cells };
+  return true;
+}
+function moveColResize(clientX) {
+  if (!colResize) return;
+  const dx = clientX - colResize.startX;
+  colResize.cells.forEach((c, i) => {
+    let w = colResize.startWidths[i] + dx;
+    if (w < 30) w = 30;
+    c.style.width = w + 'px';
+  });
+}
+function endColResize() {
+  if (!colResize) return;
+  colResize = null;
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  saveCurrentPage();
+}
+// 鼠标：在表格单元格上检测右边沿 → 列宽光标；按下 → 拖拉
+canvas.addEventListener('mousemove', (e) => {
+  if (colResize) { moveColResize(e.clientX); return; }
+  const cell = e.target.closest('.table-block td, .table-block th');
+  if (!cell) return;
+  cell.style.cursor = cellEdgeMode(cell, e.clientX) ? 'col-resize' : '';
+});
+canvas.addEventListener('mousedown', (e) => {
+  const cell = e.target.closest('.table-block td, .table-block th');
+  if (!cell) return;
+  if (cellEdgeMode(cell, e.clientX)) {
+    e.preventDefault();
+    if (startColResize(cell, e.clientX)) {
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+  }
+});
+document.addEventListener('mousemove', (e) => { if (colResize) moveColResize(e.clientX); });
+document.addEventListener('mouseup', endColResize);
+// 手机长按表格 → 菜单；但触摸单元格右边沿时优先列宽拖拉
 canvas.addEventListener('touchstart', (e) => {
   const cell = e.target.closest('.table-block td, .table-block th');
   if (!cell) return;
   const touch = e.touches[0];
+  // 边缘 → 列宽拖拉（阻止长按菜单）
+  if (cellEdgeMode(cell, touch.clientX)) {
+    e.preventDefault();
+    clearTimeout(tableCtxTimer);
+    startColResize(cell, touch.clientX);
+    return;
+  }
   clearTimeout(tableCtxTimer);
   tableCtxTimer = setTimeout(() => {
     e.preventDefault();
     showTableCtxMenu(cell, touch.clientX, touch.clientY);
   }, 500);
 }, { passive: false });
-canvas.addEventListener('touchend', () => { clearTimeout(tableCtxTimer); });
-canvas.addEventListener('touchmove', () => { clearTimeout(tableCtxTimer); });
+canvas.addEventListener('touchmove', (e) => {
+  if (colResize) {
+    e.preventDefault();
+    moveColResize(e.touches[0].clientX);
+    return;
+  }
+  clearTimeout(tableCtxTimer);
+}, { passive: false });
+canvas.addEventListener('touchend', () => {
+  if (colResize) { endColResize(); return; }
+  clearTimeout(tableCtxTimer);
+});
 // 点击页面其他位置关闭菜单
 document.addEventListener('click', (e) => {
   if (tableCtxMenu && !tableCtxMenu.contains(e.target)) closeTableCtxMenu();
@@ -2235,7 +2358,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v13';
+      const C='md-notebook-v14';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
