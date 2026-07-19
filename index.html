@@ -224,9 +224,11 @@
   #canvas pre code { background: transparent; color: inherit; padding: 0; white-space: pre; }
   #canvas a { color: var(--primary); word-break: break-all; }
   #canvas hr { border: none; border-top: 1px dashed var(--border); margin: 1.4em 0; }
-  #canvas table { border-collapse: collapse; margin: .6em 0; max-width: 100%; width: 100%; display: block; overflow-x: auto; word-break: break-word; }
-  #canvas th, #canvas td { border: 1px solid var(--border); padding: 4px 8px; font-size: .94em; word-break: break-word; overflow-wrap: anywhere; box-sizing: border-box; }
+  #canvas table { border-collapse: collapse; margin: .4em 0; max-width: 100%; width: 100%; display: block; overflow-x: auto; word-break: break-word; }
+  #canvas th, #canvas td { border: 1px solid var(--border); padding: 3px 7px; font-size: .94em; line-height: 1.35; word-break: break-word; overflow-wrap: anywhere; box-sizing: border-box; }
   #canvas th { background: var(--th-bg); }
+  /* 表格块包装层：自身无额外间距，交给内部 table 控制 */
+  #canvas .table-block { margin: .4em 0; }
   #canvas img { max-width: 100%; border-radius: 6px; }
   #canvas mark { background: var(--mark-bg); color: inherit; padding: 0 2px; border-radius: 2px; }
   /* 隶属于 .att-wrap 的图片/视频以缩略图形式呈现，点击 lightbox 放大 */
@@ -994,7 +996,9 @@ function renderPageList() {
     li.addEventListener('click', (e) => {
       if (e.target.classList.contains('pi-del')) { e.stopPropagation(); deletePage(p.id); return; }
       if (e.target.classList.contains('pi-pin')) { e.stopPropagation(); togglePin(p.id); return; }
-      switchPage(p.id); closeSidebar();
+      switchPage(p.id);
+      // 电脑端 pinned 模式下保留侧边栏常驻；手机端抽屉模式下关闭让出屏幕
+      if (!isDesktop() || !sidebar.classList.contains('pinned')) closeSidebar();
     });
     pageList.appendChild(li);
   });
@@ -2654,11 +2658,12 @@ function isUndeletableBlock(el) {
 }
 function isBlankNode(n) {
   if (!n) return false;
-  if (n.nodeType === 3) return n.textContent === '';
+  // 文本节点：空、仅零宽空格、仅空白都算空白（零宽空格是图片附件的光标锚点）
+  if (n.nodeType === 3) return n.textContent === '' || n.textContent === '\u200b' || /^[\s\u200b]*$/.test(n.textContent);
   if (n.nodeType === 1) {
     if (n.tagName === 'BR') return true;
     // 空的 <p></p> 或 <p><br></p> 也视为空白
-    if (n.tagName === 'P') return n.textContent === '' || n.innerHTML === '<br>' || n.innerHTML === '<br/>';
+    if (n.tagName === 'P') return n.textContent === '' || n.innerHTML === '<br>' || n.innerHTML === '<br/>' || /^[\s\u200b]*$/.test(n.textContent);
   }
   return false;
 }
@@ -2696,7 +2701,8 @@ function getBlockBeforeCaret(range) {
   if (container.nodeType === 3) {
     if (offset > 0) {
       const beforeText = container.textContent.substring(0, offset);
-      if (beforeText.trim() !== '') return null; // 前面有可见文字 → 让浏览器先删文字
+      // 用 [\s\u200b] 排除空白和零宽空格，避免误判图片附件后面的锚点为可见文字
+      if (beforeText.replace(/[\s\u200b]/g, '') !== '') return null;
     }
     return findUndeletableBlockBeforeNode(container);
   }
@@ -2732,7 +2738,7 @@ function getBlockAfterCaret(range) {
   if (container.nodeType === 3) {
     if (offset < container.textContent.length) {
       const afterText = container.textContent.substring(offset);
-      if (afterText.trim() !== '') return null;
+      if (afterText.replace(/[\s\u200b]/g, '') !== '') return null;
     }
     return findUndeletableBlockAfterNode(container);
   }
@@ -2823,7 +2829,7 @@ loadState().then(() => {
 if ('serviceWorker' in navigator) {
   try {
     const swCode = `
-      const C='md-notebook-v19';
+      const C='md-notebook-v20';
       self.addEventListener('install', e => self.skipWaiting());
       self.addEventListener('activate', e => e.waitUntil((async () => {
         // 清理旧版本缓存
